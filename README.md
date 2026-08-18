@@ -37,7 +37,7 @@ Snowglobe is a proposed MCP server and single-page web application for a dual-ch
 
 Snowglobe is building its **synthetic boundary proof**. It is not ready for real credentials or sensitive data. Its MCP surface uses explicit low-level handlers owned by Snowglobe; the official SDK supplies only protocol and Streamable HTTP transport machinery.
 
-A test-only in-process broker models request ownership, separate agent/viewer audiences, expiry, cancellation, and possession-resistant access. The Result API has injected, owner-authorized list/open/cancel/stream seams, incrementally admits actual Arrow record batches, and uses failure-atomic binary framing. Its default authenticator denies all result access, admission limits must be explicitly configured, it does not validate real tokens, and the broker is not a production result store. The checked-in MCP tool therefore still rejects every query.
+A test-only in-process broker models request ownership, separate agent/viewer audiences, expiry, cancellation, and possession-resistant access. The Result API has injected, owner-authorized list/open/cancel/stream seams, incrementally admits actual Arrow record batches, and uses failure-atomic binary framing. The browser worker parses that framing incrementally, inserts Arrow into a provisional in-memory DuckDB table with backpressure, and publishes only after completion and clean stream EOF. The default authenticator denies all result access, admission limits must be explicitly configured, no real token adapter connects the browser yet, and the broker is not a production result store. The checked-in MCP tool therefore still rejects every query.
 
 - [Implementation plan](PLAN.md)
 - [Documentation index](docs/README.md)

@@ -1,6 +1,6 @@
 # Snowglobe implementation plan
 
-**Status:** Incrementally admitted, owner-authorized synthetic Arrow streaming implemented
+**Status:** Failure-atomic synthetic Arrow ingestion implemented through provisional browser publication
 **Last updated:** August 18, 2026  
 **Source:** [Snowflake MCP with zero-context query results](docs/architecture-proposal.md)
 
@@ -191,7 +191,7 @@ Tasks:
 - [ ] Evaluate Snowflake SQL parsers against the required grammar and AST rewrite; reject regex-only approaches.
 - [ ] Port Querido's quote/comment/CTE/out-of-band-write SQL cases as seed fixtures, then add Snowflake-specific function, stage, scripting, and nested-query attacks.
 - [ ] Verify that `LIMIT K + 1` rewriting preserves top-level ordering and existing limit semantics for accepted queries.
-- [ ] Spike Arrow streaming through backpressure into a Web Worker and provisional DuckDB table.
+- [x] Spike Arrow streaming through backpressure into a Web Worker and provisional DuckDB table.
 - [ ] Benchmark Mosaic/vgplot and Glide against the same synthetic Arrow viewport contract.
 - [x] Record foundation runtime, low-level MCP, parser, viewer, configuration, and deployment-boundary choices as decision records.
 - [ ] Record environment-specific authentication, identity, retention, and deployment choices when inputs are known.
@@ -475,14 +475,14 @@ This statement must be rerun after changes to the host, MCP transport, authentic
 
 Completed in the current iteration:
 
-1. Added stable-schema synthetic Arrow record-batch sources and PyArrow as a core boundary dependency.
-2. Enforced explicit row, column, scalar-cell, serialized-Arrow, and decoded-Arrow budgets from actual batches.
-3. Serialized incrementally through one IPC writer without full-result concatenation or row conversion.
-4. Preserved empty-result schemas and omitted completion on schema, type, source, or budget failure.
+1. Added a bounded incremental parser for the versioned Result API framing contract.
+2. Passed each extracted Arrow IPC chunk to a fixed hidden DuckDB-Wasm table with per-chunk acknowledgements providing browser-side backpressure.
+3. Required both a valid completion frame and clean `ReadableStream` EOF before atomically renaming the provisional table for publication.
+4. Destroyed the worker-owned connection and in-memory database on framing, transport, insertion, publication, abort, or close failures.
+5. Added canary, arbitrary transport split, malformed frame, oversized frame, truncation, trailing byte, and provisional publication tests.
 
 Next:
 
-1. Implement the worker framing parser and stream canary Arrow into a provisional DuckDB-Wasm table that publishes only after completion.
-2. Connect MCP acceptance only after verified ownership, policy admission, and broker submission succeed together.
-3. Build the leak/authorization harness before connecting any sensitive Snowflake account.
-4. In parallel, time-box SQLGlot corpus/`K + 1` and Snowflake incremental Arrow spikes without joining them to the accepted path.
+1. Connect MCP acceptance only after verified ownership, policy admission, and broker submission succeed together.
+2. Build the leak/authorization harness before connecting any sensitive Snowflake account.
+3. In parallel, time-box SQLGlot corpus/`K + 1` and Snowflake incremental Arrow spikes without joining them to the accepted path.

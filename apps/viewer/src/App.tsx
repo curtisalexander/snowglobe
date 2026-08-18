@@ -13,7 +13,10 @@ const statusLabel: Record<WorkerState, string> = {
 export function App() {
   const [workerState, setWorkerState] = useState<WorkerState>("starting");
 
-  useEffect(() => startDatabaseWorker(setWorkerState), []);
+  useEffect(() => {
+    const worker = startDatabaseWorker(setWorkerState);
+    return () => worker.destroy();
+  }, []);
 
   return (
     <main>
