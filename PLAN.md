@@ -1,6 +1,6 @@
 # Snowglobe implementation plan
 
-**Status:** Foundation decisions accepted; ready for synthetic boundary proof  
+**Status:** Synthetic identities and in-process ownership broker implemented
 **Last updated:** August 18, 2026  
 **Source:** [Snowflake MCP with zero-context query results](docs/architecture-proposal.md)
 
@@ -104,6 +104,7 @@ snowglobe/
 ├── src/snowglobe/
 │   ├── mcp_gateway.py     # model-facing control-plane ASGI app
 │   ├── result_api.py      # human-facing data-plane ASGI app
+│   ├── broker.py          # test-only in-process ownership broker
 │   ├── contracts.py       # strict model-visible receipt
 │   ├── configuration.py   # strict connections.toml loader
 │   └── private_key.py     # RSA key conversion
@@ -111,13 +112,17 @@ snowglobe/
 │   └── ...                # unit tests; add boundary suites with Milestone 1
 ├── docs/
 │   ├── README.md
+│   ├── threat-model.md    # synthetic identities, flows, and test obligations
 │   ├── architecture-proposal.md
 │   └── decisions/         # architecture decision records
+├── .agents/
+│   ├── setup              # install orb toolchains and locked dependencies
+│   └── resume             # fast orb toolchain availability check
 ├── assets/
 └── AGENTS.md              # durable agent guardrails
 ```
 
-The scaffold intentionally contains no result-bearing route and returns `SERVICE_UNAVAILABLE` for every MCP submission. “Accepted” becomes possible only when the synthetic broker and authenticated ownership path exist.
+The deployable apps intentionally remain disconnected from the test-only broker: there is no result-bearing route, and every MCP submission returns `SERVICE_UNAVAILABLE`. “Accepted” becomes possible only after authentication adapters, policy admission, broker submission, and failure-atomic result streaming are connected together.
 
 ### 5.1 Querido reuse boundary
 
@@ -166,9 +171,9 @@ Querido has no implementation to reuse for query tags, statement/network timeout
 Tasks:
 
 - [ ] Answer the Phase 0 questions in section 4.
-- [ ] Write a data-flow threat model covering model, host, MCP gateway, Snowflake, broker, Result API, browser, telemetry, and endpoint.
+- [x] Write a data-flow threat model covering model, host, MCP gateway, Snowflake, broker, Result API, browser, telemetry, and endpoint.
 - [ ] Inventory every agent-accessible shell, file, browser, HTTP, screenshot, and MCP path in each proposed host.
-- [ ] Define human, agent, operator, and service identities plus trust boundaries.
+- [x] Define human, agent, operator, and service identities plus trust boundaries.
 - [ ] Define result classification, retention, deletion, audit, and incident-response policy.
 - [x] Adapt Querido's narrow TOML loading and JWT/private-key conversion patterns.
 - [ ] Implement Snowglobe-owned Snowflake connection, cursor lifecycle, and incremental Arrow retrieval.
@@ -213,10 +218,10 @@ Exit criteria:
 
 #### Synthetic broker and Result API
 
-- [ ] Associate requests with an authenticated human, status, expiry, and synthetic Arrow source.
-- [ ] Use separate agent and viewer auth audiences.
+- [x] Associate requests with verified internal human claims, status, expiry, and a synthetic Arrow source; public authentication remains disconnected.
+- [x] Use separate agent and viewer auth audiences.
 - [ ] Authorize list, open, cancel, and stream operations on every request.
-- [ ] Refuse possession-only access by request ID.
+- [x] Refuse possession-only access by request ID.
 - [ ] Stream bounded Arrow IPC with `Cache-Control: no-store` and security headers.
 - [ ] Count actual rows, bytes, columns, and maximum cell size while streaming.
 - [ ] Emit an authenticated completion marker; fail closed on cancellation, truncation, or overflow.
@@ -467,9 +472,16 @@ This statement must be rerun after changes to the host, MCP transport, authentic
 
 ## 11. Immediate next iteration
 
-1. Define synthetic human and agent identity claims, audiences, and request ownership in a threat model.
-2. Implement the in-process synthetic broker and make receipt acceptance contingent on durable request ownership.
-3. Add the authenticated Result API list/open/cancel seams and failure-atomic Arrow stream contract.
-4. Stream canary Arrow into a provisional DuckDB-Wasm table, then expose bounded viewport reads.
-5. Build the leak/authorization harness before connecting any sensitive Snowflake account.
-6. In parallel, time-box SQLGlot corpus/`K + 1` and Snowflake incremental Arrow spikes without joining them to the accepted path.
+Completed in the current iteration:
+
+1. Defined synthetic human and agent claims, separate audiences, ownership rules, and test obligations.
+2. Implemented a test-only in-process broker for owner association, TTL enforcement, cancellation, expiry, and possession-resistant access.
+3. Added repeatable Amp orb setup for `uv`, Python 3.12, Node.js 24, and locked dependencies.
+
+Next:
+
+1. Add the authenticated Result API list/open/cancel seams and failure-atomic Arrow stream contract.
+2. Connect MCP acceptance only after verified ownership, policy admission, and broker submission succeed together.
+3. Stream canary Arrow into a provisional DuckDB-Wasm table, then expose bounded viewport reads.
+4. Build the leak/authorization harness before connecting any sensitive Snowflake account.
+5. In parallel, time-box SQLGlot corpus/`K + 1` and Snowflake incremental Arrow spikes without joining them to the accepted path.

@@ -7,3 +7,4 @@ Snowglobe records consequential technical and security decisions as architecture
 | [0001](0001-foundation-stack.md) | Accepted | Foundation stack and service boundaries |
 | [0002](0002-low-level-mcp.md) | Accepted | Snowglobe owns the low-level MCP surface |
 | [0003](0003-snowflake-configuration-names.md) | Accepted | Use Snowflake connector names in `connections.toml` |
+| [0004](0004-synthetic-identities-and-broker.md) | Accepted for synthetic proof | Separate synthetic audiences and an ownership-enforcing in-process broker |

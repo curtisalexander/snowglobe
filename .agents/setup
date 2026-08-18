@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! command -v uv >/dev/null 2>&1; then
+  echo "Installing uv"
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+fi
+
+if ! node --version 2>/dev/null | grep -Eq '^v(2[2-9]|[3-9][0-9])\.'; then
+  echo "Installing Node.js 24"
+  node_archive="$(curl -LsSf https://nodejs.org/dist/latest-v24.x/SHASUMS256.txt \
+    | awk '/linux-x64.tar.xz$/ && !found {print $2; found=1}')"
+  node_version="${node_archive%.tar.xz}"
+  install_root="$HOME/.local/lib/$node_version"
+  archive_path="/tmp/$node_archive"
+
+  if [[ ! -x "$install_root/bin/node" ]]; then
+    curl -LsSf "https://nodejs.org/dist/latest-v24.x/$node_archive" -o "$archive_path"
+    curl -LsSf https://nodejs.org/dist/latest-v24.x/SHASUMS256.txt \
+      | awk -v archive="$node_archive" '$2 == archive' \
+      | (cd /tmp && sha256sum --check --status)
+    mkdir -p "$HOME/.local/lib"
+    tar -xJf "$archive_path" -C "$HOME/.local/lib"
+    rm -f "$archive_path"
+  fi
+
+  mkdir -p "$HOME/.local/bin"
+  for executable in node npm npx corepack; do
+    ln -sfn "$install_root/bin/$executable" "$HOME/.local/bin/$executable"
+  done
+fi
+
+echo "Installing locked Python dependencies"
+uv python install 3.12
+uv sync --locked
+
+echo "Installing locked viewer dependencies"
+npm ci

@@ -35,10 +35,13 @@ Snowglobe is a proposed MCP server and single-page web application for a dual-ch
 
 ## Status
 
-Snowglobe is in **scaffold and architecture validation**. It is not ready for real credentials or sensitive data. Its MCP surface uses explicit low-level handlers owned by Snowglobe; the official SDK supplies only protocol and Streamable HTTP transport machinery. The checked-in tool deliberately rejects every query until the synthetic broker, human ownership binding, and policy path are implemented together.
+Snowglobe is building its **synthetic boundary proof**. It is not ready for real credentials or sensitive data. Its MCP surface uses explicit low-level handlers owned by Snowglobe; the official SDK supplies only protocol and Streamable HTTP transport machinery.
+
+A test-only in-process broker now models request ownership, separate agent/viewer audiences, expiry, cancellation, and possession-resistant access. It is not connected to either public app, does not authenticate tokens, and is not a production result store. The checked-in MCP tool therefore still rejects every query, and the Result API still exposes no result-bearing route.
 
 - [Implementation plan](PLAN.md)
 - [Documentation index](docs/README.md)
+- [Synthetic proof threat model](docs/threat-model.md)
 - [Snowflake configuration](docs/configuration.md)
 - [Querido reuse audit](docs/querido-reference.md)
 - [Architecture decisions](docs/decisions/README.md)
@@ -64,6 +67,8 @@ Requirements:
 
 - [`uv`](https://docs.astral.sh/uv/) and a Python 3.12 toolchain;
 - Node.js 22.12 or newer and npm.
+
+Fresh Amp orbs run `.agents/setup`, which installs `uv`, Python 3.12, Node.js 24, and the locked Python and npm dependencies.
 
 ```bash
 uv sync
@@ -94,11 +99,12 @@ The MCP endpoint is `http://127.0.0.1:8000/mcp`; the Result API currently expose
 
 ```text
 apps/viewer/          React/Vite SPA and DuckDB-Wasm worker
-src/snowglobe/        separately runnable MCP and Result API modules
+src/snowglobe/        MCP, Result API, contracts, and test-only broker
 tests/                backend contract, configuration, key, and API tests
 docs/decisions/       architecture decision records
 docs/                 current docs plus retained source design material
 assets/               generated project artwork
+.agents/              Amp orb setup and resume hooks
 AGENTS.md              durable implementation and verification guardrails
 ```
 
