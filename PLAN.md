@@ -1,6 +1,6 @@
 # Snowglobe implementation plan
 
-**Status:** Synthetic identities and in-process ownership broker implemented
+**Status:** Incrementally admitted, owner-authorized synthetic Arrow streaming implemented
 **Last updated:** August 18, 2026  
 **Source:** [Snowflake MCP with zero-context query results](docs/architecture-proposal.md)
 
@@ -104,6 +104,7 @@ snowglobe/
 ├── src/snowglobe/
 │   ├── mcp_gateway.py     # model-facing control-plane ASGI app
 │   ├── result_api.py      # human-facing data-plane ASGI app
+│   ├── arrow_stream.py    # incremental Arrow admission and IPC serialization
 │   ├── broker.py          # test-only in-process ownership broker
 │   ├── contracts.py       # strict model-visible receipt
 │   ├── configuration.py   # strict connections.toml loader
@@ -220,11 +221,11 @@ Exit criteria:
 
 - [x] Associate requests with verified internal human claims, status, expiry, and a synthetic Arrow source; public authentication remains disconnected.
 - [x] Use separate agent and viewer auth audiences.
-- [ ] Authorize list, open, cancel, and stream operations on every request.
+- [x] Authorize list, open, cancel, and stream operations on every request.
 - [x] Refuse possession-only access by request ID.
-- [ ] Stream bounded Arrow IPC with `Cache-Control: no-store` and security headers.
-- [ ] Count actual rows, bytes, columns, and maximum cell size while streaming.
-- [ ] Emit an authenticated completion marker; fail closed on cancellation, truncation, or overflow.
+- [x] Stream byte-bounded synthetic Arrow IPC chunks with `Cache-Control: no-store` and security headers.
+- [x] Count actual rows, serialized/decoded bytes, columns, and maximum scalar cell size while streaming; reject unsupported nested types.
+- [x] Emit a terminal completion frame on the authenticated Result API response; omit it on cancellation, truncation, expiry, source failure, or byte overflow.
 - [ ] Keep values out of normal logs, metrics labels, traces, exceptions, URLs, and response metadata.
 
 #### Viewer
@@ -474,14 +475,14 @@ This statement must be rerun after changes to the host, MCP transport, authentic
 
 Completed in the current iteration:
 
-1. Defined synthetic human and agent claims, separate audiences, ownership rules, and test obligations.
-2. Implemented a test-only in-process broker for owner association, TTL enforcement, cancellation, expiry, and possession-resistant access.
-3. Added repeatable Amp orb setup for `uv`, Python 3.12, Node.js 24, and locked dependencies.
+1. Added stable-schema synthetic Arrow record-batch sources and PyArrow as a core boundary dependency.
+2. Enforced explicit row, column, scalar-cell, serialized-Arrow, and decoded-Arrow budgets from actual batches.
+3. Serialized incrementally through one IPC writer without full-result concatenation or row conversion.
+4. Preserved empty-result schemas and omitted completion on schema, type, source, or budget failure.
 
 Next:
 
-1. Add the authenticated Result API list/open/cancel seams and failure-atomic Arrow stream contract.
+1. Implement the worker framing parser and stream canary Arrow into a provisional DuckDB-Wasm table that publishes only after completion.
 2. Connect MCP acceptance only after verified ownership, policy admission, and broker submission succeed together.
-3. Stream canary Arrow into a provisional DuckDB-Wasm table, then expose bounded viewport reads.
-4. Build the leak/authorization harness before connecting any sensitive Snowflake account.
-5. In parallel, time-box SQLGlot corpus/`K + 1` and Snowflake incremental Arrow spikes without joining them to the accepted path.
+3. Build the leak/authorization harness before connecting any sensitive Snowflake account.
+4. In parallel, time-box SQLGlot corpus/`K + 1` and Snowflake incremental Arrow spikes without joining them to the accepted path.

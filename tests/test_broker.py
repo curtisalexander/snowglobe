@@ -1,6 +1,8 @@
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
+import pyarrow as pa
 import pytest
 
 from snowglobe.broker import (
@@ -23,8 +25,11 @@ class Clock:
 
 
 class Source:
-    def open(self) -> object:
-        return object()
+    schema = pa.schema([])
+
+    async def open(self) -> AsyncIterator[pa.RecordBatch]:
+        if False:
+            yield pa.record_batch([], schema=self.schema)
 
 
 def agent(owner: str = "human-a", audience: str = AGENT_AUDIENCE) -> AgentClaims:

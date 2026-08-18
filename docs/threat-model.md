@@ -4,9 +4,11 @@
 **Last updated:** August 18, 2026
 
 This document is the test design for the synthetic proof, not a production identity
-or storage architecture. Currently only the internal claim types and test-only
-in-process broker are implemented. MCP still rejects submissions, the Result API has
-no result route, and no token authentication or Arrow streaming is connected.
+or storage architecture. Internal claim types, the test-only in-process broker,
+injected Result API authentication/authorization seams, and synthetic Arrow admission
+are implemented. MCP still rejects submissions, the default Result API authenticator
+denies all result access, and no real token authentication or Snowflake source is
+connected.
 
 ## Security claim
 
@@ -84,6 +86,13 @@ subject must match the stored owner on every list, open, cancel, and stream acti
 - Arrow remains provisional in the worker until admission succeeds and an
   authenticated completion marker is verified. Any truncation, overflow,
   cancellation, expiry, or transport failure destroys provisional state.
+- The synthetic Result API uses the terminal frame defined in
+  [ADR 0005](decisions/0005-result-stream-framing.md). It omits that frame on any
+  stream failure; the worker integration must reject all such incomplete streams.
+- Arrow admission enforces explicitly configured row, column, scalar-cell, serialized,
+  and decoded-Arrow limits as defined in
+  [ADR 0006](decisions/0006-incremental-arrow-admission.md). Unsupported types and
+  schema changes fail closed without exposing the reason.
 
 ## Required evidence
 

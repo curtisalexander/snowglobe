@@ -5,7 +5,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from typing import Protocol
+
+from snowglobe.arrow_stream import ArrowBatchSource
 
 AGENT_AUDIENCE = "snowglobe-mcp"
 VIEWER_AUDIENCE = "snowglobe-viewer"
@@ -38,12 +39,6 @@ class ViewerClaims:
     audience: str
 
 
-class SyntheticArrowSource(Protocol):
-    """Opaque synthetic source; Arrow iteration is added at the Result API boundary."""
-
-    def open(self) -> object: ...
-
-
 @dataclass(frozen=True, slots=True)
 class RequestView:
     """Value-free request metadata safe for the authenticated human viewer."""
@@ -59,7 +54,7 @@ class _RequestRecord:
     owner_subject: str
     status: RequestStatus
     expires_at: datetime
-    source: SyntheticArrowSource
+    source: ArrowBatchSource
 
     def view(self) -> RequestView:
         return RequestView(
@@ -89,7 +84,7 @@ class InProcessBroker:
         claims: AgentClaims,
         *,
         requested_ttl: timedelta,
-        source: SyntheticArrowSource,
+        source: ArrowBatchSource,
     ) -> RequestView:
         """Atomically associate a synthetic source before returning its receipt data."""
 
@@ -119,7 +114,7 @@ class InProcessBroker:
     def get_request(self, claims: ViewerClaims, request_id: str) -> RequestView:
         return self._owned_record(claims, request_id).view()
 
-    def open_source(self, claims: ViewerClaims, request_id: str) -> SyntheticArrowSource:
+    def open_source(self, claims: ViewerClaims, request_id: str) -> ArrowBatchSource:
         record = self._owned_record(claims, request_id)
         if record.status is not RequestStatus.COMPLETE:
             raise RequestAccessDenied

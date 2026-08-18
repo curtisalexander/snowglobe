@@ -1,10 +1,307 @@
+import struct
+from collections.abc import AsyncIterator
+from dataclasses import dataclass, replace
+from datetime import timedelta
+
+import pyarrow as pa
+import pytest
+from httpx import Response
+from starlette.applications import Starlette
+from starlette.requests import Request
 from starlette.testclient import TestClient
 
-from snowglobe.result_api import app
+from snowglobe.arrow_stream import ArrowAdmissionLimits, ArrowBatchSource
+from snowglobe.broker import (
+    AGENT_AUDIENCE,
+    VIEWER_AUDIENCE,
+    AgentClaims,
+    InProcessBroker,
+    RequestAccessDenied,
+    RequestView,
+    ViewerClaims,
+)
+from snowglobe.result_api import (
+    ARROW_FRAME,
+    COMPLETE_FRAME,
+    FRAME_HEADER,
+    SECURITY_HEADERS,
+    STREAM_CONTENT_TYPE,
+    STREAM_MAGIC,
+    create_app,
+)
+
+TEST_LIMITS = ArrowAdmissionLimits(
+    maximum_rows=100,
+    maximum_columns=10,
+    maximum_cell_bytes=1024,
+    maximum_arrow_bytes=1024 * 1024,
+    maximum_decoded_bytes=1024 * 1024,
+)
+
+
+@dataclass
+class Authenticator:
+    claims: ViewerClaims | None
+
+    async def authenticate(self, request: Request) -> ViewerClaims:
+        del request
+        if self.claims is None:
+            raise RequestAccessDenied
+        return self.claims
+
+
+@dataclass
+class Source:
+    batches: tuple[pa.RecordBatch, ...]
+    failure: Exception | None = None
+    source_schema: pa.Schema | None = None
+
+    @property
+    def schema(self) -> pa.Schema:
+        if self.source_schema is not None:
+            return self.source_schema
+        if self.batches:
+            return self.batches[0].schema
+        return pa.schema([])
+
+    async def open(self) -> AsyncIterator[pa.RecordBatch]:
+        for batch in self.batches:
+            yield batch
+        if self.failure is not None:
+            raise self.failure
+
+
+def agent(owner: str = "human-a") -> AgentClaims:
+    return AgentClaims(
+        subject="agent-session",
+        human_subject=owner,
+        audience=AGENT_AUDIENCE,
+    )
+
+
+def viewer(subject: str = "human-a", audience: str = VIEWER_AUDIENCE) -> ViewerClaims:
+    return ViewerClaims(subject=subject, audience=audience)
+
+
+def submitted(
+    broker: InProcessBroker,
+    source: ArrowBatchSource | None = None,
+) -> RequestView:
+    return broker.submit(
+        agent(),
+        requested_ttl=timedelta(minutes=5),
+        source=source or Source((batch(["arrow"]),)),
+    )
+
+
+def assert_security_headers(response: Response) -> None:
+    for name, value in SECURITY_HEADERS.items():
+        assert response.headers[name] == value
+
+
+def result_app(
+    broker: InProcessBroker,
+    claims: ViewerClaims | None,
+    admission_limits: ArrowAdmissionLimits = TEST_LIMITS,
+) -> Starlette:
+    return create_app(
+        broker=broker,
+        authenticator=Authenticator(claims),
+        admission_limits=admission_limits,
+    )
+
+
+def parse_frames(body: bytes) -> list[tuple[int, bytes]]:
+    assert body.startswith(STREAM_MAGIC)
+    frames = []
+    offset = len(STREAM_MAGIC)
+    while offset < len(body):
+        frame_type, length = FRAME_HEADER.unpack_from(body, offset)
+        offset += FRAME_HEADER.size
+        payload = body[offset : offset + length]
+        assert len(payload) == length
+        frames.append((frame_type, payload))
+        offset += length
+    return frames
+
+
+def batch(values: list[str]) -> pa.RecordBatch:
+    return pa.record_batch([pa.array(values)], names=["value"])
 
 
 def test_health_is_value_free_and_not_cached() -> None:
-    response = TestClient(app).get("/healthz")
+    response = TestClient(create_app()).get("/healthz")
 
     assert response.json() == {"status": "ok"}
-    assert response.headers["cache-control"] == "no-store"
+    assert_security_headers(response)
+
+
+def test_default_app_denies_result_access() -> None:
+    response = TestClient(create_app()).get("/v1/requests")
+
+    assert response.status_code == 404
+    assert response.json() == {"error": "access_denied"}
+    assert_security_headers(response)
+
+
+def test_authenticated_stream_fails_closed_without_explicit_admission_limits() -> None:
+    broker = InProcessBroker()
+    item = submitted(broker)
+    client = TestClient(create_app(broker=broker, authenticator=Authenticator(viewer())))
+
+    response = client.get(f"/v1/requests/{item.request_id}/stream")
+
+    assert response.status_code == 503
+    assert response.json() == {"error": "service_unavailable"}
+
+
+def test_list_open_and_cancel_are_owner_authorized() -> None:
+    broker = InProcessBroker()
+    item = submitted(broker)
+    client = TestClient(result_app(broker, viewer()))
+
+    listed = client.get("/v1/requests")
+    opened = client.get(f"/v1/requests/{item.request_id}")
+    cancelled = client.post(f"/v1/requests/{item.request_id}/cancel")
+
+    assert listed.status_code == 200
+    assert listed.json() == {"requests": [opened.json()]}
+    assert opened.json() == {
+        "request_id": item.request_id,
+        "status": "complete",
+        "expires_at": item.expires_at.isoformat(),
+    }
+    assert cancelled.json()["status"] == "cancelled"
+    for response in (listed, opened, cancelled):
+        assert_security_headers(response)
+
+    denied_stream = client.get(f"/v1/requests/{item.request_id}/stream")
+    assert denied_stream.status_code == 404
+    assert denied_stream.json() == {"error": "access_denied"}
+
+
+@pytest.mark.parametrize(
+    "claims",
+    [None, viewer(audience=AGENT_AUDIENCE)],
+)
+def test_all_denied_identities_receive_the_same_non_reflective_response(
+    claims: ViewerClaims | None,
+) -> None:
+    broker = InProcessBroker()
+    item = submitted(broker)
+    canary = f"{item.request_id}-CANARY"
+    client = TestClient(result_app(broker, claims))
+
+    responses = [
+        client.get("/v1/requests"),
+        client.get(f"/v1/requests/{canary}"),
+        client.post(f"/v1/requests/{canary}/cancel"),
+        client.get(f"/v1/requests/{canary}/stream"),
+    ]
+
+    for response in responses:
+        assert response.status_code == 404
+        assert response.json() == {"error": "access_denied"}
+        assert canary.encode() not in response.content
+
+
+def test_other_owner_lists_nothing_and_cannot_use_a_copied_request_id() -> None:
+    broker = InProcessBroker()
+    item = submitted(broker)
+    client = TestClient(result_app(broker, viewer("human-b")))
+
+    listed = client.get("/v1/requests")
+    responses = [
+        client.get(f"/v1/requests/{item.request_id}"),
+        client.post(f"/v1/requests/{item.request_id}/cancel"),
+        client.get(f"/v1/requests/{item.request_id}/stream"),
+    ]
+
+    assert listed.status_code == 200
+    assert listed.json() == {"requests": []}
+    for response in responses:
+        assert response.status_code == 404
+        assert response.json() == {"error": "access_denied"}
+
+
+def test_stream_frames_arrow_and_emits_terminal_completion() -> None:
+    broker = InProcessBroker()
+    source = Source((batch(["first"]), batch(["second"])))
+    item = submitted(broker, source)
+    client = TestClient(result_app(broker, viewer()))
+
+    response = client.get(f"/v1/requests/{item.request_id}/stream")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == STREAM_CONTENT_TYPE
+    frames = parse_frames(response.content)
+    assert frames[-1] == (COMPLETE_FRAME, b"")
+    ipc = b"".join(payload for kind, payload in frames if kind == ARROW_FRAME)
+    reader = pa.ipc.open_stream(ipc)
+    assert reader.read_next_batch().column(0)[0].as_py() == "first"
+    assert reader.read_next_batch().column(0)[0].as_py() == "second"
+    assert_security_headers(response)
+
+
+@pytest.mark.parametrize(
+    ("source", "maximum_arrow_bytes", "expected_arrow"),
+    [
+        (Source((batch(["first"]),), RuntimeError("RESULT_CANARY")), 10_000, True),
+        (Source((batch(["too-large"]),)), 1, False),
+    ],
+)
+def test_incomplete_or_overflowing_stream_omits_completion_without_leaking_errors(
+    source: Source,
+    maximum_arrow_bytes: int,
+    expected_arrow: bool,
+) -> None:
+    broker = InProcessBroker()
+    item = submitted(broker, source)
+    client = TestClient(
+        result_app(
+            broker,
+            viewer(),
+            replace(TEST_LIMITS, maximum_arrow_bytes=maximum_arrow_bytes),
+        )
+    )
+
+    response = client.get(f"/v1/requests/{item.request_id}/stream")
+    frames = parse_frames(response.content)
+
+    assert any(kind == ARROW_FRAME for kind, _payload in frames) is expected_arrow
+    assert all(kind != COMPLETE_FRAME for kind, _payload in frames)
+    assert b"RESULT_CANARY" not in response.content
+
+
+def test_cancellation_during_stream_omits_later_bytes_and_completion() -> None:
+    broker = InProcessBroker()
+
+    class CancellingSource:
+        request_id = ""
+        schema = batch([""]).schema
+
+        async def open(self) -> AsyncIterator[pa.RecordBatch]:
+            yield batch(["first"])
+            broker.cancel(viewer(), self.request_id)
+            yield batch(["must-not-be-released"])
+
+    source = CancellingSource()
+    item = broker.submit(
+        agent(),
+        requested_ttl=timedelta(minutes=5),
+        source=source,
+    )
+    source.request_id = item.request_id
+    client = TestClient(result_app(broker, viewer()))
+
+    response = client.get(f"/v1/requests/{item.request_id}/stream")
+
+    frames = parse_frames(response.content)
+    assert len(frames) == 1
+    assert frames[0][0] == ARROW_FRAME
+    assert b"must-not-be-released" not in response.content
+
+
+def test_frame_header_is_fixed_width_network_byte_order() -> None:
+    assert FRAME_HEADER.size == 9
+    assert FRAME_HEADER.pack(ARROW_FRAME, 256) == struct.pack(">BQ", ARROW_FRAME, 256)

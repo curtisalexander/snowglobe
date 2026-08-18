@@ -1151,6 +1151,7 @@ source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
     { name = "mcp" },
+    { name = "pyarrow" },
     { name = "pydantic" },
     { name = "sqlglot" },
     { name = "starlette" },
@@ -1159,7 +1160,6 @@ dependencies = [
 
 [package.optional-dependencies]
 snowflake = [
-    { name = "pyarrow" },
     { name = "snowflake-connector-python" },
 ]
 
@@ -1176,7 +1176,7 @@ dev = [
 requires-dist = [
     { name = "cryptography", specifier = ">=46.0,<47" },
     { name = "mcp", specifier = ">=2.0,<3" },
-    { name = "pyarrow", marker = "extra == 'snowflake'", specifier = ">=21,<22" },
+    { name = "pyarrow", specifier = ">=21,<22" },
     { name = "pydantic", specifier = ">=2.12,<3" },
     { name = "snowflake-connector-python", marker = "extra == 'snowflake'", specifier = ">=4.7,<5" },
     { name = "sqlglot", specifier = ">=30.17,<31" },

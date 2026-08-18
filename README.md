@@ -37,7 +37,7 @@ Snowglobe is a proposed MCP server and single-page web application for a dual-ch
 
 Snowglobe is building its **synthetic boundary proof**. It is not ready for real credentials or sensitive data. Its MCP surface uses explicit low-level handlers owned by Snowglobe; the official SDK supplies only protocol and Streamable HTTP transport machinery.
 
-A test-only in-process broker now models request ownership, separate agent/viewer audiences, expiry, cancellation, and possession-resistant access. It is not connected to either public app, does not authenticate tokens, and is not a production result store. The checked-in MCP tool therefore still rejects every query, and the Result API still exposes no result-bearing route.
+A test-only in-process broker models request ownership, separate agent/viewer audiences, expiry, cancellation, and possession-resistant access. The Result API has injected, owner-authorized list/open/cancel/stream seams, incrementally admits actual Arrow record batches, and uses failure-atomic binary framing. Its default authenticator denies all result access, admission limits must be explicitly configured, it does not validate real tokens, and the broker is not a production result store. The checked-in MCP tool therefore still rejects every query.
 
 - [Implementation plan](PLAN.md)
 - [Documentation index](docs/README.md)
@@ -85,7 +85,7 @@ npm test
 npm run build
 ```
 
-Run the deliberately closed backend shells locally:
+Run the deliberately closed backend apps locally:
 
 ```bash
 uv run uvicorn snowglobe.mcp_gateway:app --port 8000
@@ -93,7 +93,7 @@ uv run uvicorn snowglobe.result_api:app --port 8001
 npm run dev
 ```
 
-The MCP endpoint is `http://127.0.0.1:8000/mcp`; the Result API currently exposes only a value-free `/healthz`. Do not add a result route until human authentication, ownership authorization, admission, and failure-atomic Arrow streaming are implemented together.
+The MCP endpoint is `http://127.0.0.1:8000/mcp`. The Result API exposes a value-free `/healthz`; its result routes fail closed under the default deny-all authenticator. Synthetic tests inject verified viewer claims, but no public token adapter or real result source is configured.
 
 ## Repository layout
 
