@@ -346,10 +346,42 @@ Candidate features, each requiring its own requirements and security review:
 - [ ] saved viewer configuration containing identifiers/rules but no cell values;
 - [ ] authorized server-paged mode;
 - [ ] audited export with classification, rate, retention, and deletion controls;
+- [ ] explicit human-approved disclosure of a bounded viewer selection to an agent;
 - [ ] reviewed metadata/catalog access;
 - [ ] narrow model-visible aggregate or `PASS`/`FAIL`/`SUPPRESSED` tools;
 - [ ] deterministic host-side “Open governed results” action outside model context; and
 - [ ] MCP App evaluation only for hosts that prove app-only data separation.
+
+### Backlog idea — controlled viewer-to-agent disclosure
+
+After proving the zero-context boundary, evaluate an explicit workflow in which a human uses DuckDB-Wasm to project columns, filter rows, sort, and apply a small row limit, then deliberately discloses that exact subset to an agent. This is a **separate disclosure product**, not “sanitization” merely because fewer cells are selected, and it changes the guarantee for the disclosed subset: those values may enter model input, host history, logs, prompt caches, and provider retention.
+
+Prototype the least-integrated option first:
+
+1. **Copy for paste:** render a bounded selection as escaped Markdown, CSV, or JSON; show an exact preview and estimated size/token count; require a human click to copy; then let the human paste it into the conversation. Nothing reaches the agent until the paste.
+2. **Audited download/export:** create a short-lived local artifact only if users need file-shaped context. This adds endpoint storage, agent file-access, retention, deletion, and classification concerns, so it should not be the default.
+3. **Direct agent handoff:** add a host-specific, human-initiated integration that sends the approved payload to one certified conversation. Do not route it through the base query receipt or add a generic model-callable `read_result` tool. Direct handoff requires proof that the selected host displays the exact payload for confirmation and does not silently enrich it with undisclosed viewer state.
+
+Every option must:
+
+- start from an explicit human selection or saved deterministic DuckDB query, never the full result by default;
+- show the exact columns, rows, formatting, and bytes that will leave the viewer;
+- enforce independent row, column, cell, byte, and token limits;
+- reapply an egress policy for classifications, masking, minimum groups, prohibited columns, and dangerous content rather than trusting projection/filtering alone;
+- treat cell text as untrusted data, escaping format delimiters and clearly separating it from agent instructions to reduce prompt-injection risk;
+- require a fresh confirmation naming the destination agent/conversation and the resulting disclosure consequences;
+- avoid values in URLs, telemetry, audit labels, notifications, and ordinary logs;
+- record value-free provenance such as request ID, user, destination, selected column identifiers, filter/query fingerprint, counts, time, policy version, and approval outcome;
+- prevent background synchronization, automatic retries to another destination, and reuse after result/session expiry; and
+- have canary tests proving that only the previewed payload—not hidden rows, omitted columns, worker state, or result metadata—reaches the certified agent context.
+
+Open product questions for this backlog item:
+
+- Is manual copy/paste sufficient, or does direct handoff remove enough friction to justify host-specific security work?
+- Which formats best preserve types while remaining understandable and resistant to instruction/data confusion?
+- Must disclosure be limited to already masked values, or can a separate policy approve otherwise prohibited source classifications?
+- Should the disclosed payload include a human-readable provenance header, and which identifiers are safe for model context?
+- Can a user revoke or expire a direct handoff before the host submits its next model request?
 
 ## 7. Contract sketch
 
