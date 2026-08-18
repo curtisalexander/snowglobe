@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keeping data out of the context window</title>
+<style>
+  /* ---- Tokens -------------------------------------------------------- */
+  :root {
+    color-scheme: light dark;
+
+    --ground:      #f1f4f6;
+    --surface:     #ffffff;
+    --surface-2:   #f7f9fb;
+    --ink:         #14212a;
+    --ink-soft:    #33454f;
+    --muted:       #5c6b76;
+    --hairline:    #dbe2e8;
+    --hairline-2:  #e8edf1;
+
+    --teal:        #10788a;   /* data / flow accent          */
+    --teal-bright: #0f8ea3;
+    --teal-wash:   #e2f0f2;
+
+    --leak:        #b45309;   /* semantic: enters context    */
+    --leak-wash:   #f7ead9;
+    --contain:     #1a7f5a;   /* semantic: stays local       */
+    --contain-wash:#e0f0e7;
+    --danger:      #b3261e;
+
+    --shadow: 0 1px 2px rgba(20,33,42,.05), 0 8px 30px -18px rgba(20,33,42,.28);
+
+    --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, "Cascadia Mono", Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+    --measure: 68ch;
+    --band: 1060px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground:      #0d161b;
+      --surface:     #131f26;
+      --surface-2:   #182731;
+      --ink:         #e7eef2;
+      --ink-soft:    #c2d0d8;
+      --muted:       #8ba0ac;
+      --hairline:    #24333c;
+      --hairline-2:  #1d2b33;
+
+      --teal:        #2bc0d4;
+      --teal-bright: #45d3e6;
+      --teal-wash:   #10333a;
+
+      --leak:        #e79a4d;
+      --leak-wash:   #33240f;
+      --contain:     #45c491;
+      --contain-wash:#0f2f22;
+      --danger:      #ea6a5f;
+
+      --shadow: 0 1px 2px rgba(0,0,0,.35), 0 18px 44px -22px rgba(0,0,0,.7);
+    }
+  }
+  /* Explicit toggle wins over the media query in both directions */
+  :root[data-theme="light"] {
+    --ground:#f1f4f6; --surface:#ffffff; --surface-2:#f7f9fb; --ink:#14212a; --ink-soft:#33454f;
+    --muted:#5c6b76; --hairline:#dbe2e8; --hairline-2:#e8edf1;
+    --teal:#10788a; --teal-bright:#0f8ea3; --teal-wash:#e2f0f2;
+    --leak:#b45309; --leak-wash:#f7ead9; --contain:#1a7f5a; --contain-wash:#e0f0e7; --danger:#b3261e;
+    --shadow:0 1px 2px rgba(20,33,42,.05),0 8px 30px -18px rgba(20,33,42,.28);
+  }
+  :root[data-theme="dark"] {
+    --ground:#0d161b; --surface:#131f26; --surface-2:#182731; --ink:#e7eef2; --ink-soft:#c2d0d8;
+    --muted:#8ba0ac; --hairline:#24333c; --hairline-2:#1d2b33;
+    --teal:#2bc0d4; --teal-bright:#45d3e6; --teal-wash:#10333a;
+    --leak:#e79a4d; --leak-wash:#33240f; --contain:#45c491; --contain-wash:#0f2f22; --danger:#ea6a5f;
+    --shadow:0 1px 2px rgba(0,0,0,.35),0 18px 44px -22px rgba(0,0,0,.7);
+  }
+
+  /* ---- Reset / base -------------------------------------------------- */
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection { background: var(--teal); color: #fff; }
+
+  a { color: var(--teal-bright); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+  a:focus-visible, button:focus-visible {
+    outline: 2px solid var(--teal-bright); outline-offset: 3px; border-radius: 3px;
+  }
+
+  .wrap { width: 100%; max-width: var(--measure); margin-inline: auto; padding-inline: 24px; }
+  .band { width: 100%; max-width: var(--band); margin-inline: auto; padding-inline: 24px; }
+
+  code, kbd, pre, .mono { font-family: var(--mono); }
+
+  h1, h2, h3 { text-wrap: balance; line-height: 1.12; letter-spacing: -.018em; }
+  h2 { font-size: clamp(1.5rem, 1.1rem + 1.7vw, 2.05rem); margin: 0 0 .5rem; }
+  h3 { font-size: 1.14rem; letter-spacing: -.008em; margin: 0 0 .35rem; }
+  p  { margin: 0 0 1.05rem; }
+  p.lead { color: var(--ink-soft); }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: .72rem; font-weight: 600;
+    letter-spacing: .18em; text-transform: uppercase; color: var(--teal);
+  }
+
+  /* ---- Header bar ---------------------------------------------------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, var(--ground) 86%, transparent);
+    backdrop-filter: saturate(1.4) blur(10px);
+    border-bottom: 1px solid var(--hairline);
+  }
+  .topbar .inner {
+    max-width: var(--band); margin-inline: auto; padding: 11px 24px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .brandmark {
+    font-family: var(--mono); font-size: .74rem; letter-spacing: .04em;
+    color: var(--muted); display: flex; align-items: center; gap: 9px;
+  }
+  .brandmark b { color: var(--ink); font-weight: 600; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 0 4px var(--teal-wash); }
+  .themebtn {
+    margin-left: auto; font: inherit; font-family: var(--mono); font-size: .72rem;
+    color: var(--muted); background: var(--surface); border: 1px solid var(--hairline);
+    border-radius: 7px; padding: 5px 11px; cursor: pointer; letter-spacing: .02em;
+  }
+  .themebtn:hover { color: var(--ink); border-color: var(--muted); }
+
+  /* ---- Hero ---------------------------------------------------------- */
+  .hero { padding: clamp(3.2rem, 2rem + 6vw, 6rem) 0 1.6rem; }
+  .hero h1 {
+    font-size: clamp(2.15rem, 1.3rem + 4.2vw, 3.65rem);
+    font-weight: 680; margin: .85rem 0 0;
+  }
+  .hero .lead { font-size: clamp(1.06rem, 1rem + .5vw, 1.24rem); max-width: 60ch; margin-top: 1.1rem; }
+  .kicker-line { display: flex; align-items: center; gap: 12px; }
+  .kicker-line::after { content: ""; height: 1px; flex: 1; background: var(--hairline); }
+
+  /* ---- Schematic (the fork) ----------------------------------------- */
+  .schematic {
+    background: var(--surface); border: 1px solid var(--hairline);
+    border-radius: 16px; box-shadow: var(--shadow);
+    padding: clamp(20px, 3vw, 34px); margin: 2.4rem 0 1rem;
+  }
+  .schematic .cap {
+    font-family: var(--mono); font-size: .72rem; letter-spacing: .04em;
+    color: var(--muted); margin-bottom: 20px; display: flex; gap: 10px; align-items: baseline;
+  }
+  .schematic .cap b { color: var(--ink); font-weight: 600; }
+
+  .flow { display: grid; grid-template-columns: 1fr; gap: 16px; }
+  .node {
+    border: 1px solid var(--hairline); border-radius: 11px; padding: 14px 16px;
+    background: var(--surface-2);
+  }
+  .node .nlabel { font-family: var(--mono); font-size: .68rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  .node .ntitle { font-weight: 620; margin: 3px 0 2px; }
+  .node .ndesc  { font-size: .9rem; color: var(--muted); line-height: 1.5; }
+
+  .node.pivot {
+    border-color: var(--teal); background:
+      linear-gradient(0deg, var(--teal-wash), var(--teal-wash)) padding-box;
+    box-shadow: inset 0 0 0 1px var(--teal);
+  }
+  .node.pivot .nlabel { color: var(--teal); }
+
+  .connector { display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--muted); }
+  .connector .rail { width: 2px; height: 16px; background: var(--hairline); }
+  .connector .tag { font-family: var(--mono); font-size: .68rem; color: var(--muted); }
+
+  .fork { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 620px) { .fork { grid-template-columns: 1fr; } }
+
+  .branch { border-radius: 12px; padding: 16px; border: 1px solid var(--hairline); background: var(--surface-2); }
+  .branch .path { font-family: var(--mono); font-size: .78rem; color: var(--ink-soft); margin-bottom: 10px; }
+  .branch .outcome { display: flex; align-items: center; gap: 9px; font-weight: 640; }
+  .branch .sub { font-size: .88rem; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+  .pill {
+    font-family: var(--mono); font-size: .66rem; letter-spacing: .06em; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 999px; font-weight: 600; white-space: nowrap;
+  }
+  .branch.leak    { border-color: color-mix(in srgb, var(--leak) 45%, var(--hairline)); background: var(--leak-wash); }
+  .branch.leak .pill    { background: var(--leak); color: #fff; }
+  .branch.contain { border-color: color-mix(in srgb, var(--contain) 45%, var(--hairline)); background: var(--contain-wash); }
+  .branch.contain .pill { background: var(--contain); color: #fff; }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .swatch.leak { background: var(--leak); } .swatch.contain { background: var(--contain); }
+
+  /* ---- Sections ------------------------------------------------------ */
+  section { padding: clamp(2.4rem, 1.6rem + 3vw, 4rem) 0; }
+  section + section { border-top: 1px solid var(--hairline-2); }
+  .snum {
+    font-family: var(--mono); font-size: .72rem; letter-spacing: .12em; color: var(--teal);
+    font-weight: 600;
+  }
+  .sechead { margin-bottom: 1.4rem; }
+
+  /* Callout / insight */
+  .insight {
+    border-left: 3px solid var(--teal); background: var(--surface);
+    border-radius: 0 12px 12px 0; padding: 18px 22px; margin: 1.5rem 0;
+    box-shadow: var(--shadow);
+  }
+  .insight p { margin: 0; font-size: 1.12rem; color: var(--ink); font-weight: 500; }
+  .insight .who { font-family: var(--mono); font-size: .72rem; color: var(--muted); margin-top: 10px; display: block; }
+
+  /* Layer ladder */
+  .ladder { display: grid; gap: 12px; margin: 1.5rem 0 .5rem; }
+  .layer {
+    display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: start;
+    border: 1px solid var(--hairline); border-radius: 12px; padding: 16px 18px; background: var(--surface);
+  }
+  .layer .lv {
+    font-family: var(--mono); font-size: .7rem; letter-spacing: .1em; color: var(--muted);
+    border: 1px solid var(--hairline); border-radius: 7px; padding: 4px 8px; white-space: nowrap; align-self: start;
+  }
+  .layer h3 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .layer p { margin: .3rem 0 0; font-size: .95rem; color: var(--muted); }
+  .strength { font-family: var(--mono); font-size: .64rem; letter-spacing: .05em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; font-weight: 600; }
+  .strength.weak   { background: var(--leak-wash);    color: var(--leak); }
+  .strength.mid    { background: var(--teal-wash);    color: var(--teal); }
+  .strength.strong { background: var(--contain-wash); color: var(--contain); }
+  .layer.spotlight { border-color: var(--teal); box-shadow: inset 0 0 0 1px var(--teal); }
+
+  /* Pattern table */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--hairline); border-radius: 12px; margin: 1.4rem 0; }
+  table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: .92rem; }
+  thead th {
+    text-align: left; font-family: var(--mono); font-size: .68rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600; padding: 12px 16px; background: var(--surface-2);
+    border-bottom: 1px solid var(--hairline);
+  }
+  tbody td { padding: 13px 16px; border-bottom: 1px solid var(--hairline-2); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: 0; }
+  td .p { font-family: var(--mono); font-weight: 600; color: var(--ink); }
+  td.ret { font-family: var(--mono); font-size: .82rem; color: var(--ink-soft); }
+  .verdict { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; font-size: .88rem; }
+  .verdict.leak { color: var(--leak); } .verdict.contain { color: var(--contain); }
+
+  /* Code */
+  .codecard { border: 1px solid var(--hairline); border-radius: 12px; overflow: hidden; margin: 1.3rem 0; background: var(--surface); box-shadow: var(--shadow); }
+  .codecard .filebar {
+    font-family: var(--mono); font-size: .72rem; color: var(--muted);
+    padding: 10px 16px; border-bottom: 1px solid var(--hairline); background: var(--surface-2);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .codecard .filebar .fdot { width: 8px; height: 8px; border-radius: 50%; background: var(--teal); opacity: .8; }
+  pre { margin: 0; padding: 16px; overflow-x: auto; font-size: .82rem; line-height: 1.6; color: var(--ink-soft); }
+  pre .c { color: var(--muted); }      /* comment */
+  pre .k { color: var(--teal-bright); font-weight: 600; } /* keyword */
+  pre .s { color: var(--contain); }    /* string  */
+  pre .b { color: var(--leak); font-weight: 600; }        /* block/danger */
+
+  /* Caveat box */
+  .caveat {
+    border: 1px dashed color-mix(in srgb, var(--leak) 55%, var(--hairline));
+    background: var(--leak-wash); border-radius: 12px; padding: 18px 20px; margin: 1.6rem 0;
+  }
+  .caveat .tag { font-family: var(--mono); font-size: .7rem; letter-spacing: .1em; text-transform: uppercase; color: var(--leak); font-weight: 700; }
+  .caveat p { margin: .5rem 0 0; color: var(--ink-soft); font-size: .96rem; }
+  .caveat p:last-child { margin-bottom: 0; }
+
+  ul.clean { margin: 0 0 1.05rem; padding-left: 1.2rem; }
+  ul.clean li { margin-bottom: .5rem; }
+  ul.clean li::marker { color: var(--teal); }
+
+  strong { color: var(--ink); font-weight: 640; }
+  .u-leak    { color: var(--leak); font-weight: 600; }
+  .u-contain { color: var(--contain); font-weight: 600; }
+
+  /* Footer */
+  footer { border-top: 1px solid var(--hairline); padding: 2.4rem 0 3rem; color: var(--muted); font-size: .9rem; }
+  footer a { font-family: var(--mono); font-size: .84rem; }
+  footer .links { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: .6rem; }
+
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="inner">
+    <span class="brandmark"><span class="dot"></span> <b>context&nbsp;boundary</b> / agent data access</span>
+    <button class="themebtn" id="themebtn" type="button" aria-label="Toggle color theme">theme</button>
+  </div>
+</div>
+
+<header class="hero wrap">
+  <div class="kicker-line"><span class="eyebrow">Data governance for coding agents</span></div>
+  <h1>Keep the data out of the context window.</h1>
+  <p class="lead">
+    When a coding agent queries Snowflake, the danger isn't the query — it's what comes <em>back</em>.
+    Raw rows that land in the model's context are sent to the model, cached, logged, and shown on screen.
+    The good news: whether that happens is decided at exactly one place, and it's a place you control.
+  </p>
+</header>
+
+<!-- ============================ SCHEMATIC ============================ -->
+<div class="band">
+  <div class="schematic">
+    <div class="cap"><b>The whole problem in one diagram</b><span>&mdash; the same query, two return contracts</span></div>
+
+    <div class="flow">
+      <div class="node">
+        <div class="nlabel">Coding agent (the model)</div>
+        <div class="ntitle">Emits a tool call &mdash; a request, not a connection</div>
+        <div class="ndesc">The agent never touches the database. It holds a <em>reference</em> to a tool, like a call slip at a closed-stacks library.</div>
+      </div>
+
+      <div class="connector"><div class="rail"></div><span class="tag">JSON&nbsp;{ sql, args }&nbsp;↓</span><div class="rail"></div></div>
+
+      <div class="node pivot">
+        <div class="nlabel">Executing tool / program &nbsp;·&nbsp; the decision point</div>
+        <div class="ntitle">Runs the SQL, then decides what to return</div>
+        <div class="ndesc">MCP server or script &mdash; it holds the credentials, receives the rows from Snowflake, and makes the single most consequential choice on this page.</div>
+      </div>
+
+      <div class="connector"><div class="rail"></div><span class="tag">what does it hand back?</span><div class="rail"></div></div>
+
+      <div class="fork">
+        <div class="branch leak">
+          <div class="path">return rows → stdout / tool result</div>
+          <div class="outcome"><span class="swatch leak"></span> Into the context window <span class="pill">enters context</span></div>
+          <div class="sub">Raw records become tokens: transmitted to the model, retained in transcript &amp; caches, printed to the user. This is the leak.</div>
+        </div>
+        <div class="branch contain">
+          <div class="path">write file/stage → return { path, rows, schema }</div>
+          <div class="outcome"><span class="swatch contain"></span> Stays on local disk <span class="pill">contained</span></div>
+          <div class="sub">Only a pointer and metadata cross the boundary. Downstream tools operate on the file; the values themselves never enter context.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ PROBLEM ============================ -->
+<section id="problem">
+  <div class="wrap">
+    <div class="sechead">
+      <span class="snum">01 — The problem</span>
+      <h2>Helpful agents are indiscriminate about data</h2>
+    </div>
+    <p>
+      A coding agent is built to look at things. Ask it to investigate a table and it will happily
+      <code>SELECT *</code>, read the output, reason over the values, and quote them back to you. That reflex is
+      exactly what makes it useful — and exactly what makes it dangerous against a governed warehouse.
+    </p>
+    <p>Everything that reaches the context window is, in effect, <strong>published</strong>:</p>
+    <ul class="clean">
+      <li>It is <strong>sent to the model provider</strong> as part of the prompt on every subsequent turn.</li>
+      <li>It is <strong>persisted</strong> — in the session transcript, in prompt caches, in any logging or observability layer you've wired up.</li>
+      <li>It is <strong>rendered to the user</strong>, who may not be entitled to see those specific rows.</li>
+    </ul>
+    <p>
+      For PII, PHI, card data, or anything under a data-residency or least-privilege regime, a single
+      <code>SELECT customer_email, ssn FROM …</code> that prints its results is an exfiltration event — not because
+      anyone was malicious, but because the agent did its job well. Prompting it to <em>&ldquo;be careful with sensitive
+      data&rdquo;</em> is not a control; it's a suggestion the model will honor most of the time and drop under pressure in
+      a long or ambiguous session.
+    </p>
+  </div>
+</section>
+
+<!-- ============================ INSIGHT ============================ -->
+<section id="insight">
+  <div class="wrap">
+    <div class="sechead">
+      <span class="snum">02 — The key insight</span>
+      <h2>The tool boundary decides exposure — not the agent</h2>
+    </div>
+    <p>
+      The agent is <strong>never connected to Snowflake</strong>. It emits a request and gets a result. In between sits
+      the executing tool — the MCP server or the script — which holds the credentials and receives the rows. Whether
+      those rows continue on into the context window is a property of <strong>what that tool chooses to return</strong>.
+    </p>
+
+    <div class="insight">
+      <p>Context leakage is set by the tool's return contract, not by the model's intent. Control the return surface and you control exposure.</p>
+      <span class="who">// the thesis behind flake-fetch-flow — the tool holds a reference, like a pointer in C</span>
+    </div>
+
+    <p>
+      This reframes the whole problem. You are not trying to make a capable, curious agent behave. You are designing a
+      boundary so that <strong>the sensitive data has no path into context in the first place</strong>. A tool that
+      writes results to a Parquet file and returns <code>{ path, rows, schema }</code> cannot leak a single value — there
+      is nothing to leak, by construction. The agent can then load, aggregate, and analyze that file with tools that
+      likewise return only shapes and summaries.
+    </p>
+    <p>
+      Once you see the boundary clearly, the guardrails sort themselves into a ladder — from advisory at the top to
+      structural at the bottom.
+    </p>
+  </div>
+</section>
+
+<!-- ============================ RECOMMENDATIONS ============================ -->
+<section id="recommendations">
+  <div class="wrap">
+    <div class="sechead">
+      <span class="snum">03 — Recommendations</span>
+      <h2>Defense in depth, ordered by how hard it is to bypass</h2>
+    </div>
+    <p>
+      The goal is to push enforcement as far <em>down</em> this ladder as you can. Higher layers are easy to add and
+      easy to defeat; lower layers make leakage structurally impossible or neutralize the data at its source.
+    </p>
+
+    <div class="ladder">
+      <div class="layer">
+        <span class="lv">L0</span>
+        <div>
+          <h3>Prompt &amp; <code>CLAUDE.md</code> instructions <span class="strength weak">weakest · advisory</span></h3>
+          <p>&ldquo;Never print raw rows; always write to a file.&rdquo; Useful as intent-setting and documentation, but it relies on model compliance. Necessary, never sufficient.</p>
+        </div>
+      </div>
+
+      <div class="layer">
+        <span class="lv">L1</span>
+        <div>
+          <h3>Hooks &amp; permissions <span class="strength mid">deterministic · reactive</span></h3>
+          <p>A <code>PreToolUse</code> hook or a permission deny-list blocks any call that <em>would</em> stream rows into context. Deterministic and uncircumventable by the model — but it pattern-matches the symptom. See §04.</p>
+        </div>
+      </div>
+
+      <div class="layer spotlight">
+        <span class="lv">L2</span>
+        <div>
+          <h3>Tool return contract <span class="strength strong">structural · leak-proof</span></h3>
+          <p>The tool <em>cannot</em> return rows — it writes to disk or a stage and returns only a reference and metadata. This is the real fix: when there is nothing to block, the L1 hook has nothing to do.</p>
+        </div>
+      </div>
+
+      <div class="layer spotlight">
+        <span class="lv">L3</span>
+        <div>
+          <h3>Data-layer governance <span class="strength strong">strongest · at the source</span></h3>
+          <p>Least-privilege roles, row-access policies, and <strong>dynamic data masking</strong> in the warehouse. Even a value that <em>is</em> returned comes back masked. Enforced by the database, independent of any agent.</p>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:2rem">Return-a-reference, not a resultset</h3>
+    <p>
+      The L2 layer is just a discipline about what the tool hands back. These are the patterns cataloged in
+      <a href="https://github.com/curtisalexander/flake-fetch-flow">flake-fetch-flow</a>, sorted by whether data crosses
+      the boundary:
+    </p>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Pattern</th><th>What the tool returns</th><th>Boundary</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="p">Rows via MCP</span></td>
+            <td class="ret">up to N result rows</td>
+            <td><span class="verdict leak">◆ enters context</span></td>
+          </tr>
+          <tr>
+            <td><span class="p">Script → stdout</span></td>
+            <td class="ret">printed table / console text</td>
+            <td><span class="verdict leak">◆ enters context</span></td>
+          </tr>
+          <tr>
+            <td><span class="p">MCP → CSV/Parquet</span></td>
+            <td class="ret">{ path, row_count }</td>
+            <td><span class="verdict contain">◆ stays local</span></td>
+          </tr>
+          <tr>
+            <td><span class="p">Script → file stream</span></td>
+            <td class="ret">one metadata line</td>
+            <td><span class="verdict contain">◆ stays local</span></td>
+          </tr>
+          <tr>
+            <td><span class="p">DataFrame load</span></td>
+            <td class="ret">{ shape, dtypes }</td>
+            <td><span class="verdict contain">◆ stays local</span></td>
+          </tr>
+          <tr>
+            <td><span class="p">Metadata-only</span></td>
+            <td class="ret">schema / counts / aggregates by design</td>
+            <td><span class="verdict contain">◆ stays local</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="color:var(--muted);font-size:.92rem">
+      Same warehouse, same SQL, same agent. The only variable is the tool's return value — which is why the boundary,
+      not the model, is where you invest.
+    </p>
+  </div>
+</section>
+
+<!-- ============================ HOOKS & PERMISSIONS ============================ -->
+<section id="hooks">
+  <div class="wrap">
+    <div class="sechead">
+      <span class="snum">04 — Hooks &amp; permissions as a guardrail</span>
+      <h2>The deterministic net you build to later throw away</h2>
+    </div>
+    <p>
+      Instructions ask; hooks <em>enforce</em>. A <code>PreToolUse</code> hook receives the pending tool call as JSON on
+      stdin, inspects it, and — by exiting with status <strong>2</strong> — blocks the call and feeds its stderr back to
+      the model as the reason. Because the harness runs it, not the model, it holds even in a long or adversarial
+      session. That makes hooks the right tool while your data tools are still capable of leaking.
+    </p>
+
+    <p><strong>Permissions</strong> give you the coarse cut: deny the row-returning paths outright, allow only the sanctioned file-writing script.</p>
+
+    <div class="codecard">
+      <div class="filebar"><span class="fdot"></span> .claude/settings.json</div>
+<pre><span class="c">// Close the direct-to-stdout paths; leave one sanctioned door open.</span>
+{
+  <span class="k">"permissions"</span>: {
+    <span class="k">"deny"</span>: [
+      <span class="b">"Bash(snow sql:*)"</span>,           <span class="c">// Snowflake CLI prints rows</span>
+      <span class="b">"Bash(snowsql:*)"</span>,
+      <span class="b">"mcp__snowflake__run_query"</span>     <span class="c">// row-returning MCP tool</span>
+    ],
+    <span class="k">"allow"</span>: [
+      <span class="s">"Bash(python scripts/query_to_parquet.py:*)"</span>
+    ]
+  },
+  <span class="k">"hooks"</span>: {
+    <span class="k">"PreToolUse"</span>: [
+      { <span class="k">"matcher"</span>: <span class="s">"Bash"</span>,
+        <span class="k">"hooks"</span>: [ { <span class="k">"type"</span>: <span class="s">"command"</span>,
+          <span class="k">"command"</span>: <span class="s">"$CLAUDE_PROJECT_DIR/.claude/hooks/block-raw-data.sh"</span> } ] }
+    ]
+  }
+}</pre>
+    </div>
+
+    <p>
+      A hook catches what a static deny-list can't — the SQL smuggled through an allowed interpreter, a new CLI flag, a
+      pipe to <code>cat</code>. It reads the actual command and refuses anything that would put rows on stdout:
+    </p>
+
+    <div class="codecard">
+      <div class="filebar"><span class="fdot"></span> .claude/hooks/block-raw-data.sh</div>
+<pre><span class="c">#!/usr/bin/env bash</span>
+<span class="c"># PreToolUse: refuse commands that would stream query rows into context.</span>
+<span class="k">set</span> -euo pipefail
+
+payload=<span class="s">"$(cat)"</span>
+cmd=<span class="s">"$(printf '%s' "$payload" | jq -r '.tool_input.command // ""')"</span>
+
+<span class="c"># Any direct Snowflake client that renders a resultset to the terminal.</span>
+<span class="k">if</span> printf <span class="s">'%s'</span> <span class="s">"$cmd"</span> | grep -Eiq <span class="s">'(snow[[:space:]]+sql|snowsql|\.fetchall\(|SELECT .* --format)'</span>; <span class="k">then</span>
+  <span class="k">echo</span> <span class="b">"Blocked: this would print rows into the model context."</span> &gt;&amp;2
+  <span class="k">echo</span> <span class="s">"Use scripts/query_to_parquet.py — it returns only {path, rows, schema}."</span> &gt;&amp;2
+  <span class="k">exit</span> <span class="b">2</span>   <span class="c"># exit 2 = block the call, return stderr to the model</span>
+<span class="k">fi</span>
+
+<span class="k">exit</span> 0</pre>
+    </div>
+
+    <div class="caveat">
+      <span class="tag">◆ Why we want to eliminate this layer</span>
+      <p>
+        A hook is a <strong>net under a leaky pipe</strong>. It is deterministic, which is genuinely better than a
+        prompt — but it is <em>reactive</em>: it enumerates the ways a capable tool could spill data and races the agent
+        to block each one. Every new client, flag, or interpreter is a fresh gap, and the regex that guards you is only
+        as good as the last leak you imagined.
+      </p>
+      <p>
+        The tell that you've fixed the real problem is that <strong>the hook stops firing</strong> — because the tools it
+        guards can no longer return rows at all (L2), and anything that slips through comes back masked at the source
+        (L3). Ship the hook today so you're covered while the tools are still leaky; treat the day you can delete it as
+        the milestone. <strong>The strongest guardrail is the one you no longer need.</strong>
+      </p>
+    </div>
+
+    <p style="color:var(--muted);font-size:.92rem">
+      Note: project settings live in the repo and can be edited by anyone who can edit the repo. For a boundary that
+      users and agents cannot relax, deploy the same rules as <strong>managed settings</strong> — admin-controlled and
+      not overridable locally — which is the only way to enforce a deterministic, organization-wide guardrail.
+    </p>
+  </div>
+</section>
+
+<!-- ============================ CLOSE ============================ -->
+<section id="close">
+  <div class="wrap">
+    <div class="sechead">
+      <span class="snum">05 — Where to land</span>
+      <h2>Make leakage impossible, then make the block unnecessary</h2>
+    </div>
+    <p>
+      Aim the design so that the answer to <em>&ldquo;could this expose a raw value?&rdquo;</em> is <span class="u-contain">no,
+      by construction</span> — not <span class="u-leak">no, because something blocked it in time</span>. That means
+      tools whose return contract is a reference plus metadata, warehouse governance that masks at the source, and
+      hooks and permissions kept on as a deterministic safety net you are actively trying to render redundant.
+    </p>
+    <ul class="clean">
+      <li><strong>Design the tool boundary first.</strong> Return <code>{ path, rows, schema }</code>, never resultsets. This is the layer that actually removes the risk.</li>
+      <li><strong>Govern at the source.</strong> Row-access policies and dynamic masking in Snowflake protect you even when a value does come back.</li>
+      <li><strong>Keep hooks &amp; permissions as the net.</strong> Deterministic coverage for the gap between today's leaky tools and tomorrow's leak-proof ones — and prefer managed settings when the boundary must hold org-wide.</li>
+      <li><strong>Use prompts for intent, not enforcement.</strong> Document the contract in <code>CLAUDE.md</code>; never rely on it to hold the line.</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>Companion write-up to <strong>flake-fetch-flow</strong> — where the choice of executing tool decides whether data enters the agent's context.</div>
+    <div class="links">
+      <a href="https://github.com/curtisalexander/flake-fetch-flow">github.com/curtisalexander/flake-fetch-flow</a>
+      <a href="https://claude.com/blog/steering-claude-code-skills-hooks-rules-subagents-and-more">Steering Claude Code — hooks &amp; deterministic guardrails</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var btn = document.getElementById('themebtn');
+    var root = document.documentElement;
+    function current() {
+      return root.getAttribute('data-theme') ||
+        (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    }
+    btn.addEventListener('click', function () {
+      var next = current() === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+    });
+  })();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A simple, interactive explanation of how data moves through a coding agent, an LLM, tools, and Snowflake.">
+<title>The model sees what comes back</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --night: #07111f;
+    --night-2: #0a1728;
+    --panel: #0e2035;
+    --panel-2: #132a43;
+    --ink: #f7fbff;
+    --soft: #a9bdd1;
+    --line: #27425d;
+    --cyan: #4ad7e8;
+    --blue: #6ca8ff;
+    --green: #63e6a4;
+    --amber: #ffbd66;
+    --red: #ff7272;
+    --purple: #b49aff;
+    --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    --shadow: 0 24px 70px rgba(0, 0, 0, .32);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(circle at 76% 4%, rgba(74, 215, 232, .12), transparent 28rem),
+      radial-gradient(circle at 10% 22%, rgba(180, 154, 255, .08), transparent 26rem),
+      var(--night);
+    color: var(--ink);
+    font: 16px/1.6 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input { font: inherit; }
+  button { color: inherit; }
+  a { color: var(--cyan); text-underline-offset: 3px; }
+  button:focus-visible, a:focus-visible { outline: 3px solid var(--cyan); outline-offset: 3px; }
+  .wrap { width: min(1120px, calc(100% - 40px)); margin-inline: auto; }
+  .narrow { width: min(860px, calc(100% - 40px)); margin-inline: auto; }
+  .mono { font-family: var(--mono); }
+
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(7, 17, 31, .82); border-bottom: 1px solid rgba(255,255,255,.08);
+    backdrop-filter: blur(18px) saturate(1.25);
+  }
+  .topbar-inner { height: 58px; display: flex; align-items: center; gap: 12px; }
+  .brand { display: flex; align-items: center; gap: 10px; color: var(--soft); font: 700 12px/1 var(--mono); letter-spacing: .11em; text-transform: uppercase; }
+  .brand-dot { width: 11px; height: 11px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 0 5px rgba(74,215,232,.12); }
+  .top-link { margin-left: auto; color: var(--soft); font-size: 13px; text-decoration: none; }
+  .top-link:hover { color: var(--ink); }
+
+  .hero { padding: clamp(52px, 8vw, 92px) 0 42px; text-align: center; }
+  .eyebrow { margin: 0 0 18px; color: var(--cyan); font: 700 12px/1.2 var(--mono); letter-spacing: .18em; text-transform: uppercase; }
+  h1 { max-width: 950px; margin: 0 auto; font-size: clamp(42px, 8vw, 88px); line-height: .98; letter-spacing: -.055em; text-wrap: balance; }
+  .hero-lead { max-width: 780px; margin: 23px auto 0; color: var(--soft); font-size: clamp(18px, 2.5vw, 23px); line-height: 1.5; text-wrap: balance; }
+  .hero-lead strong { color: var(--ink); }
+  .tldr {
+    position: relative; max-width: 910px; margin: 34px auto 0; padding: 22px 30px;
+    border: 1px solid rgba(74,215,232,.5); border-radius: 18px;
+    background: linear-gradient(135deg, rgba(74,215,232,.12), rgba(108,168,255,.07));
+    box-shadow: 0 0 60px rgba(74,215,232,.08);
+  }
+  .tldr-label { color: var(--cyan); font: 800 11px/1 var(--mono); letter-spacing: .2em; text-transform: uppercase; }
+  .tldr p { margin: 10px 0 0; font-size: clamp(22px, 3.2vw, 34px); font-weight: 760; line-height: 1.2; letter-spacing: -.025em; text-wrap: balance; }
+  .tldr em { color: var(--amber); font-style: normal; }
+
+  .story-intro { padding: 22px 0 15px; text-align: center; scroll-margin-top: 75px; }
+  .section-tag { color: var(--cyan); font: 700 11px/1 var(--mono); letter-spacing: .18em; text-transform: uppercase; }
+  h2 { margin: 10px 0 12px; font-size: clamp(30px, 5vw, 52px); line-height: 1.05; letter-spacing: -.04em; text-wrap: balance; }
+  .section-lead { max-width: 720px; margin: 0 auto; color: var(--soft); font-size: 18px; }
+
+  .explorer {
+    margin: 30px auto 86px; border: 1px solid var(--line); border-radius: 24px; overflow: visible;
+    background: rgba(10,23,40,.93); box-shadow: var(--shadow);
+  }
+  .explorer-bar { display: flex; align-items: center; gap: 15px; min-height: 64px; padding: 13px 18px; border-bottom: 1px solid var(--line); border-radius: 23px 23px 0 0; background: rgba(255,255,255,.025); }
+  .window-dots { display: flex; gap: 7px; }
+  .window-dots i { width: 9px; height: 9px; border-radius: 50%; background: #36516c; }
+  .step-readout { color: var(--soft); font: 700 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+  .progress { flex: 1; max-width: 340px; height: 5px; margin-left: auto; overflow: hidden; background: #172d44; border-radius: 99px; }
+  .progress span { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--cyan), var(--blue)); transition: width .45s ease; }
+  .reset-btn { border: 0; background: transparent; color: var(--soft); cursor: pointer; font: 700 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+  .reset-btn:hover { color: var(--ink); }
+
+  .stage {
+    position: relative; min-height: 700px; padding: 36px;
+    background-image: radial-gradient(rgba(108,168,255,.13) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+  .stage::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at 50% 45%, transparent 10%, rgba(7,17,31,.23) 100%); }
+  .flow-grid { position: relative; z-index: 2; display: grid; grid-template-columns: repeat(7, 1fr); grid-template-rows: 190px 165px 230px; gap: 28px 22px; min-height: 628px; align-items: center; }
+  @media (min-width: 851px) {
+    .stage.has-outcome { min-height: 780px; }
+    .stage.has-outcome .flow-grid { grid-template-rows: 190px 165px 310px; min-height: 708px; }
+  }
+
+  .actor, .packet, .choice, .outcome {
+    opacity: 0; transform: translateY(12px) scale(.98); pointer-events: none;
+    transition: opacity .42s ease, transform .42s ease, border-color .3s ease, filter .3s ease;
+  }
+  .actor.visible, .packet.visible, .choice.visible, .outcome.visible { opacity: 1; transform: none; pointer-events: auto; }
+  .actor {
+    position: relative; border: 1px solid var(--line); border-radius: 18px; padding: 18px;
+    background: rgba(14,32,53,.96); box-shadow: 0 15px 40px rgba(0,0,0,.2);
+  }
+  .actor:has(.info:hover), .actor:has(.info:focus) { z-index: 100; }
+  .actor.active { border-color: var(--cyan); filter: drop-shadow(0 0 18px rgba(74,215,232,.13)); }
+  .actor-icon { width: 76px; height: 76px; display: grid; place-items: center; overflow: hidden; border: 1px solid rgba(108,168,255,.2); border-radius: 20px; background: radial-gradient(circle at 35% 25%, rgba(108,168,255,.2), rgba(108,168,255,.06)); color: var(--blue); }
+  .actor-icon svg { width: 68px; height: 68px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; transition: transform .35s ease; }
+  .actor-icon .soft-fill { fill: currentColor; opacity: .11; stroke: none; }
+  .actor-icon .mid-fill { fill: currentColor; opacity: .25; stroke: none; }
+  .actor-icon .bright-fill { fill: currentColor; opacity: .8; stroke: none; }
+  .actor.active .actor-icon { box-shadow: inset 0 0 25px rgba(74,215,232,.1), 0 0 0 4px rgba(74,215,232,.06); }
+  .actor.active .actor-icon svg { transform: scale(1.05); }
+  .actor h3 { margin: 12px 0 2px; font-size: 17px; line-height: 1.2; }
+  .actor p { margin: 0; color: var(--soft); font-size: 12px; line-height: 1.45; }
+  .info {
+    position: absolute; top: 12px; right: 12px; width: 25px; height: 25px; padding: 0;
+    border: 1px solid var(--line); border-radius: 50%; color: var(--soft); background: var(--night-2); cursor: help;
+    font: 800 12px/1 var(--mono);
+  }
+  .tooltip {
+    position: absolute; z-index: 1000; left: 50%; bottom: calc(100% + 10px); width: 235px; padding: 12px 14px;
+    border: 1px solid #42617e; border-radius: 11px; background: #071421; color: #dce9f5;
+    font: 12px/1.5 var(--sans); box-shadow: 0 15px 35px rgba(0,0,0,.4);
+    opacity: 0; transform: translate(-50%, 5px); pointer-events: none; transition: .18s ease;
+  }
+  .info:hover .tooltip, .info:focus .tooltip { opacity: 1; transform: translate(-50%, 0); }
+
+  #person { grid-area: 2 / 1 / 3 / 2; }
+  #harness { grid-area: 2 / 3 / 3 / 4; }
+  #model { grid-area: 1 / 5 / 2 / 6; }
+  #program { grid-area: 2 / 5 / 3 / 6; }
+  #snowflake { grid-area: 2 / 7 / 3 / 8; }
+  #model .actor-icon { color: var(--purple); background: rgba(180,154,255,.13); }
+  #program .actor-icon { color: var(--green); background: rgba(99,230,164,.12); }
+  #snowflake .actor-icon { color: var(--cyan); background: rgba(74,215,232,.12); }
+
+  .packet { position: relative; z-index: 4; align-self: center; justify-self: stretch; color: var(--soft); text-align: center; }
+  .packet:not(#p-model) { width: calc(100% + 44px); margin-inline: -22px; }
+  .packet-line { display: flex; align-items: center; gap: 7px; }
+  .packet-line::before { content: ""; flex: 1; height: 3px; background: currentColor; }
+  .packet-line::after { content: ""; flex: 0 0 13px; width: 13px; height: 15px; margin-left: -2px; background: currentColor; clip-path: polygon(0 0, 100% 50%, 0 100%, 30% 50%); }
+  .packet.bidirectional .packet-line::before { background: currentColor; }
+  .packet.bidirectional .packet-line::after { content: "⇄"; flex-basis: auto; width: auto; height: auto; margin-left: -3px; padding-left: 2px; background: var(--night-2); clip-path: none; font-size: 24px; line-height: 1; }
+  .packet.reverse .packet-line { flex-direction: row-reverse; }
+  .packet.reverse .packet-line::before { background: linear-gradient(90deg, transparent, currentColor); }
+  .packet.reverse .packet-line::after { transform: rotate(180deg); }
+  .packet-label { display: inline-flex; align-items: center; gap: 6px; margin-top: 7px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--night-2); font: 10.5px/1.25 var(--mono); white-space: nowrap; }
+  .packet-label svg { width: 16px; height: 16px; flex: none; stroke: var(--cyan); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .packet.travel .packet-line { color: var(--cyan); animation: pulse-line 1.2s infinite; }
+  @keyframes pulse-line { 50% { opacity: .45; } }
+  #p-user { grid-area: 2 / 2 / 3 / 3; }
+  #p-model { grid-area: 1 / 4 / 2 / 5; width: calc(100% + 28px); transform: rotate(-18deg); transform-origin: right center; }
+  #p-model .packet-line::before { background: currentColor; }
+  #p-model .packet-label { transform: rotate(18deg); }
+  #p-exec { grid-area: 2 / 4 / 3 / 5; }
+  #p-data { grid-area: 2 / 6 / 3 / 7; }
+
+  @media (min-width: 851px) {
+    #p-model { grid-area: 1 / 4 / 3 / 5; width: calc(100% + 44px); height: 206px; align-self: center; justify-self: center; transform: translateY(6px); }
+    #p-model .packet-line { position: absolute; inset: 0; display: block; background: linear-gradient(to bottom right, transparent calc(50% - 1.5px), currentColor calc(50% - 1.5px), currentColor calc(50% + 1.5px), transparent calc(50% + 1.5px)); }
+    #p-model .packet-line::before, #p-model .packet-line::after { position: absolute; width: 13px; height: 15px; margin: 0; padding: 0; background: currentColor; clip-path: polygon(0 0, 100% 50%, 0 100%, 30% 50%); }
+    #p-model .packet-line::before { left: -4px; bottom: -5px; opacity: 0; transform: rotate(130deg); }
+    #p-model .packet-line::after { right: -4px; top: -5px; transform: rotate(-50deg); }
+    #p-model.bidirectional .packet-line::before { opacity: 1; }
+    #p-model .packet-label { position: absolute; left: 50%; top: 50%; margin: 0; transform: translate(-50%, -50%); }
+  }
+
+  .chat-demo { grid-area: 1 / 1 / 2 / 3; align-self: end; position: relative; z-index: 5; opacity: 0; transform: translateY(10px); transition: .4s ease; }
+  .chat-demo.visible { opacity: 1; transform: none; }
+  .chat-box { border: 1px solid #3a5773; border-radius: 13px; padding: 13px 46px 13px 14px; background: #0b1a2a; color: var(--ink); font-size: 13px; box-shadow: 0 12px 30px rgba(0,0,0,.2); }
+  .send-dot { position: absolute; right: 11px; top: 11px; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; background: var(--cyan); color: #05212a; font-weight: 900; }
+  .cursor { display: inline-block; width: 7px; height: 15px; vertical-align: -2px; background: var(--cyan); animation: blink .9s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .thought { grid-area: 1 / 6 / 2 / 8; align-self: start; position: relative; z-index: 6; max-width: 250px; padding: 13px 15px; border: 1px solid rgba(180,154,255,.5); border-radius: 16px 16px 16px 4px; background: #171d3a; color: #ded5ff; font-size: 12px; opacity: 0; transform: scale(.94); transition: .35s ease; }
+  .thought.visible { opacity: 1; transform: none; }
+  .thought small { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; color: var(--purple); font: 700 9px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+  .thought small svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+
+  .decision { grid-area: 3 / 2 / 4 / 7; align-self: start; position: relative; z-index: 7; opacity: 0; transform: translateY(12px); pointer-events: none; transition: .4s ease; }
+  .decision.visible { opacity: 1; transform: none; pointer-events: auto; }
+  .decision-title { margin-bottom: 10px; text-align: center; font: 700 11px/1 var(--mono); color: var(--amber); letter-spacing: .1em; text-transform: uppercase; }
+  .return-gate { position: relative; z-index: 2; width: max-content; max-width: 100%; display: flex; align-items: center; gap: 9px; margin: 0 auto; padding: 7px 11px; border: 1px solid var(--amber); border-radius: 9px; background: #1d2130; color: var(--amber); font: 750 10px/1.25 var(--mono); }
+  .return-gate svg { width: 22px; height: 22px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .choices { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding-top: 24px; }
+  .choices::before { content: ""; position: absolute; top: 11px; left: 25%; right: 25%; border-top: 1px solid var(--amber); opacity: .7; }
+  .choice { display: flex; align-items: center; gap: 12px; min-height: 78px; padding: 13px 15px; text-align: left; border: 1px solid var(--line); border-radius: 13px; background: #10233a; cursor: pointer; }
+  .choice::before { content: ""; position: absolute; top: 11px; width: 1px; height: 13px; background: var(--amber); opacity: .7; }
+  .choice:first-child::before { left: 25%; }
+  .choice:last-child::before { left: 75%; }
+  .decision.visible .choice { opacity: 1; transform: none; pointer-events: auto; }
+  .choice:hover { transform: translateY(-2px); }
+  .choice.bad:hover { border-color: var(--red); }
+  .choice.good:hover { border-color: var(--green); }
+  .choice-mark { flex: 0 0 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; font-size: 20px; }
+  .choice-mark svg { width: 28px; height: 28px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .bad .choice-mark { color: var(--red); background: rgba(255,114,114,.12); }
+  .good .choice-mark { color: var(--green); background: rgba(99,230,164,.12); }
+  .choice b { display: block; font-size: 13px; }
+  .choice small { display: block; color: var(--soft); font-size: 11px; line-height: 1.35; }
+
+  .outcome { grid-area: 3 / 1 / 4 / 8; z-index: 9; align-self: start; min-height: 125px; padding: 19px 22px; border: 1px solid; border-radius: 16px; background: #0d1c2d; }
+  .outcome.bad { border-color: rgba(255,114,114,.65); background: linear-gradient(120deg, rgba(255,114,114,.12), #0d1c2d); }
+  .outcome.good { border-color: rgba(99,230,164,.65); background: linear-gradient(120deg, rgba(99,230,164,.12), #0d1c2d); }
+  .outcome h4 { margin: 0 0 5px; font-size: 19px; }
+  .outcome p { margin: 0; color: var(--soft); font-size: 13px; }
+  .outcome strong { color: var(--ink); }
+  .return-route { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font: 800 11px/1.3 var(--mono); letter-spacing: .04em; text-transform: uppercase; }
+  .return-route span { padding: 6px 9px; border: 1px solid currentColor; border-radius: 6px; background: rgba(7,17,31,.75); }
+  .outcome.bad .return-route { color: var(--red); }
+  .outcome.good .return-route { color: var(--green); }
+  .payload { display: inline-block; margin-top: 8px; padding: 4px 8px; border-radius: 6px; background: rgba(7,17,31,.75); color: var(--ink); font: 11px/1.4 var(--mono); }
+  .payload-table { margin-top: 10px; border-collapse: separate; border-spacing: 0; overflow: hidden; border: 1px solid rgba(255,114,114,.5); border-radius: 7px; background: rgba(7,17,31,.8); color: var(--ink); font: 10px/1.25 var(--mono); }
+  .payload-table caption { padding: 0 0 5px; color: var(--red); text-align: left; font: 750 8px/1 var(--mono); letter-spacing: .09em; text-transform: uppercase; }
+  .payload-table th, .payload-table td { padding: 5px 9px; text-align: left; border-right: 1px solid rgba(255,114,114,.22); }
+  .payload-table th:last-child, .payload-table td:last-child { border-right: 0; }
+  .payload-table th { color: var(--red); font-size: 8px; letter-spacing: .08em; text-transform: uppercase; background: rgba(255,114,114,.08); }
+  .payload-table td { border-top: 1px solid rgba(255,114,114,.22); }
+
+  .control-deck { display: flex; align-items: center; min-height: 104px; padding: 18px 22px; border-top: 1px solid var(--line); border-radius: 0 0 23px 23px; background: #091625; }
+  .step-avatar { flex: 0 0 56px; height: 56px; display: grid; place-items: center; margin-right: 15px; overflow: hidden; border: 1px solid var(--line); border-radius: 15px; background: var(--panel); color: var(--cyan); }
+  .step-avatar svg { width: 50px; height: 50px; stroke: currentColor; fill: none; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
+  .step-avatar .soft-fill { fill: currentColor; opacity: .11; stroke: none; }
+  .step-avatar .mid-fill { fill: currentColor; opacity: .25; stroke: none; }
+  .step-avatar .bright-fill { fill: currentColor; opacity: .8; stroke: none; }
+  .step-copy { flex: 1; padding-right: 25px; }
+  .step-copy strong { display: block; margin-bottom: 2px; font-size: 16px; }
+  .step-copy span { color: var(--soft); font-size: 13px; }
+  .next-btn { flex: 0 0 auto; border: 0; border-radius: 11px; padding: 12px 17px; background: var(--cyan); color: #04222b; cursor: pointer; font-weight: 800; box-shadow: 0 8px 25px rgba(74,215,232,.18); }
+  .next-btn:hover { background: #79e5f1; transform: translateY(-1px); }
+  .next-btn:disabled { opacity: .35; cursor: not-allowed; transform: none; }
+
+  .principle { padding: 10px 0 96px; }
+  .principle-card { display: grid; grid-template-columns: 150px 1fr; gap: 35px; align-items: center; padding: 38px; border: 1px solid rgba(99,230,164,.38); border-radius: 22px; background: linear-gradient(135deg, rgba(99,230,164,.1), rgba(14,32,53,.72)); }
+  .shield { width: 130px; height: 130px; display: grid; place-items: center; border-radius: 36px; color: var(--green); background: rgba(99,230,164,.1); }
+  .shield svg { width: 72px; height: 72px; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .principle h2 { margin-top: 7px; font-size: clamp(29px, 4vw, 43px); }
+  .principle p { margin: 0; color: var(--soft); font-size: 17px; }
+  .principle strong { color: var(--ink); }
+  .pattern-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 19px; }
+  .pattern { padding: 13px 15px; border: 1px solid var(--line); border-radius: 11px; background: rgba(7,17,31,.5); font-size: 13px; }
+  .pattern b { display: block; margin-bottom: 2px; }
+  .pattern.bad { border-color: rgba(255,114,114,.42); color: var(--soft); }
+  .pattern.bad b { color: var(--red); }
+  .pattern.good { border-color: rgba(99,230,164,.42); color: var(--soft); }
+  .pattern.good b { color: var(--green); }
+
+  .support { padding: 88px 0; border-top: 1px solid rgba(255,255,255,.08); }
+  .support-head { max-width: 730px; margin-bottom: 34px; }
+  .support-head p { color: var(--soft); font-size: 18px; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .card { padding: 23px; border: 1px solid var(--line); border-radius: 17px; background: rgba(14,32,53,.72); }
+  .card-icon { width: 42px; height: 42px; display: grid; place-items: center; margin-bottom: 17px; border-radius: 12px; color: var(--amber); background: rgba(255,189,102,.1); font-size: 21px; }
+  .card h3 { margin: 0 0 7px; font-size: 17px; }
+  .card p { margin: 0; color: var(--soft); font-size: 14px; }
+  .card code { color: var(--amber); font: 12px var(--mono); }
+  .warning { border-color: rgba(255,114,114,.4); }
+  .warning .card-icon { color: var(--red); background: rgba(255,114,114,.1); }
+
+  .rules-banner { display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: start; margin-top: 18px; padding: 22px 24px; border: 1px solid rgba(255,189,102,.43); border-radius: 16px; background: rgba(255,189,102,.08); }
+  .rules-banner .symbol { color: var(--amber); font-size: 28px; line-height: 1; }
+  .rules-banner h3 { margin: 0 0 3px; font-size: 18px; }
+  .rules-banner p { margin: 0; color: var(--soft); font-size: 14px; }
+
+  .value-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .value-card { padding: 27px; border: 1px solid var(--line); border-radius: 18px; background: rgba(14,32,53,.72); }
+  .value-card h3 { margin: 0 0 9px; font-size: 21px; }
+  .value-card p { margin: 0 0 13px; color: var(--soft); }
+  .value-card ul { margin: 0; padding-left: 20px; color: var(--soft); }
+  .value-card li { margin: 6px 0; }
+  .value-card li::marker { color: var(--cyan); }
+  .big-number { color: var(--cyan); font: 800 13px/1 var(--mono); letter-spacing: .12em; }
+  .human-loop { border-color: rgba(180,154,255,.4); }
+  .human-loop .big-number { color: var(--purple); }
+
+  .decision-strip { margin-top: 18px; padding: 24px; border: 1px solid var(--line); border-radius: 18px; background: #091727; }
+  .decision-strip h3 { margin: 0 0 17px; text-align: center; font-size: 16px; }
+  .route { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; gap: 12px; text-align: center; }
+  .route-box { min-height: 79px; display: grid; place-items: center; padding: 12px; border: 1px solid var(--line); border-radius: 12px; color: var(--soft); font-size: 13px; }
+  .route-box strong { display: block; color: var(--ink); }
+  .route-arrow { color: var(--purple); font-size: 24px; }
+
+  .close { padding: 95px 0 105px; text-align: center; }
+  .close h2 { max-width: 900px; margin-inline: auto; }
+  .close p { max-width: 690px; margin: 15px auto 28px; color: var(--soft); font-size: 18px; }
+  .close-rule { display: inline-block; padding: 14px 20px; border-radius: 11px; background: var(--cyan); color: #04222b; font-weight: 850; }
+  footer { padding: 24px 0 45px; border-top: 1px solid rgba(255,255,255,.08); color: var(--soft); font-size: 13px; }
+  footer .wrap { display: flex; justify-content: space-between; gap: 20px; }
+
+  @media (max-width: 850px) {
+    .stage { min-height: auto; padding: 25px 18px; }
+    .flow-grid { grid-template-columns: 1fr 44px 1fr; grid-template-rows: repeat(5, auto); gap: 16px 8px; min-height: 770px; }
+    #person { grid-area: 1 / 1; } #harness { grid-area: 1 / 3; } #model { grid-area: 3 / 1; }
+    #program { grid-area: 3 / 3; } #snowflake { grid-area: 5 / 3; }
+    #p-user { grid-area: 1 / 2; } #p-model { grid-area: 2 / 1 / 3 / 2; transform: rotate(90deg); }
+    #p-model .packet-label { transform: rotate(-90deg); }
+    #p-exec { display: none; } #p-data { grid-area: 4 / 3 / 5 / 4; transform: rotate(90deg); }
+    #p-data .packet-label { transform: rotate(-90deg); }
+    .chat-demo { grid-area: 2 / 2 / 3 / 4; align-self: center; }
+    .thought { grid-area: 4 / 1 / 6 / 2; align-self: start; }
+    .decision { grid-area: 6 / 1 / 7 / 4; }
+    .outcome { grid-area: 6 / 1 / 7 / 4; }
+    .cards { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 640px) {
+    .wrap, .narrow { width: min(100% - 26px, 1120px); }
+    .top-link { display: none; }
+    .hero { padding-top: 48px; }
+    .tldr { padding: 21px 17px; }
+    .explorer { border-radius: 17px; margin-bottom: 62px; }
+    .explorer-bar { padding: 12px; }
+    .window-dots, .reset-btn { display: none; }
+    .stage { padding: 18px 10px; }
+    .flow-grid { display: grid; grid-template-columns: 1fr; grid-template-rows: none; gap: 12px; min-height: 0; }
+    .flow-grid > * { grid-area: auto !important; }
+    .actor:not(.visible), .packet:not(.visible), .thought:not(.visible), .chat-demo:not(.visible) { display: none; }
+    .actor { width: min(240px, 100%); justify-self: center; padding: 13px; }
+    .actor-icon { width: 66px; height: 66px; }
+    .actor-icon svg { width: 60px; height: 60px; }
+    .actor h3 { font-size: 14px; }
+    .actor p { font-size: 10px; }
+    .chat-demo { width: 100%; align-self: auto; }
+    .packet { width: 180px !important; margin-inline: 0 !important; justify-self: center; transform: none !important; }
+    .packet-line { flex-direction: column; gap: 0; }
+    .packet-line::before { flex: none; width: 2px; height: 27px; background: linear-gradient(transparent, currentColor); }
+    .packet-line::after { content: ""; margin: -2px 0 0; transform: rotate(90deg); }
+    .packet.bidirectional .packet-line::before { background: currentColor; }
+    .packet.bidirectional .packet-line::after { content: "⇅"; margin-top: -5px; padding-left: 0; background: var(--night-2); transform: none; }
+    .packet-label, #p-model .packet-label, #p-data .packet-label { margin-top: 1px; transform: none; }
+    .thought { width: min(240px, 100%); max-width: none; justify-self: center; font-size: 11px; }
+    .decision:not(.visible), .outcome:not(.visible) { display: none; }
+    .decision, .outcome { width: 100%; }
+    .choices { grid-template-columns: 1fr; }
+    .choices::before, .choice::before { display: none; }
+    .control-deck { display: block; padding: 17px; }
+    .step-avatar { float: left; width: 48px; height: 48px; margin: 0 12px 8px 0; }
+    .step-avatar svg { width: 43px; height: 43px; }
+    .step-copy { padding: 0 0 13px; }
+    .next-btn { width: 100%; }
+    .principle-card { grid-template-columns: 1fr; padding: 27px; }
+    .shield { width: 82px; height: 82px; border-radius: 24px; }
+    .shield svg { width: 46px; height: 46px; }
+    .pattern-compare { grid-template-columns: 1fr; }
+    .return-route { justify-content: center; flex-wrap: wrap; }
+    .tooltip { position: fixed; left: 18px; right: 18px; bottom: 18px; width: auto; transform: translateY(5px); }
+    .info:hover .tooltip, .info:focus .tooltip { transform: none; }
+    .cards, .value-grid { grid-template-columns: 1fr; }
+    .route { grid-template-columns: 1fr; }
+    .route-arrow { transform: rotate(90deg); }
+    footer .wrap { display: block; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
+  }
+</style>
+</head>
+<body>
+<nav class="topbar" aria-label="Page navigation">
+  <div class="wrap topbar-inner">
+    <div class="brand"><span class="brand-dot"></span> Data &amp; AI · plain English</div>
+    <a class="top-link" href="#interactive">See how the data moves ↓</a>
+  </div>
+</nav>
+
+<header class="hero wrap">
+  <p class="eyebrow">The 5-minute leader briefing</p>
+  <h1>The model sees what comes back.</h1>
+  <p class="hero-lead">A coding agent is not one magic box. It is an <strong>LLM that requests</strong> plus a <strong>harness that acts</strong>. When a tool runs, the model does not see the database—it sees what the approved program returns.</p>
+  <div class="tldr">
+    <span class="tldr-label">The memorable version</span>
+    <p>The LLM requests. The harness executes. <em>The program controls what comes back.</em></p>
+  </div>
+</header>
+
+<main>
+  <section class="story-intro wrap" id="interactive">
+    <span class="section-tag">Interactive walkthrough</span>
+    <h2>Watch one request travel to Snowflake—and back.</h2>
+    <p class="section-lead">Start with the person. Reveal each part of the system, then choose what the approved program returns.</p>
+  </section>
+
+  <section class="explorer wrap" aria-label="Interactive data flow diagram">
+    <div class="explorer-bar">
+      <div class="window-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div class="step-readout" id="stepReadout">Step 1 of 7</div>
+      <div class="progress" aria-hidden="true"><span id="progressBar"></span></div>
+      <button class="reset-btn" id="resetBtn" type="button">↺ Reset</button>
+    </div>
+
+    <div class="stage" id="stage">
+      <div class="flow-grid">
+        <div class="chat-demo" id="chatDemo">
+          <div class="chat-box"><span id="typedPrompt"></span><span class="cursor" id="typingCursor" aria-hidden="true"></span></div>
+          <span class="send-dot" aria-hidden="true">↑</span>
+        </div>
+
+        <article class="actor" id="person">
+          <button class="info" type="button" aria-label="More about the person" aria-describedby="personTip">i<span class="tooltip" id="personTip" role="tooltip">The person describes the goal and uses the approved process. Authorization and control ownership are shared with the relevant data, tool, and platform owners.</span></button>
+          <div class="actor-icon" aria-hidden="true"><svg viewBox="0 0 64 64"><circle class="soft-fill" cx="32" cy="32" r="29"/><circle cx="22" cy="18" r="7"/><path d="M15 17c1-7 12-10 15-1M17 28c2-3 6-4 10-3 4 2 6 6 7 11M12 51c1-12 5-20 12-20 4 0 7 2 10 6"/><path class="mid-fill" d="M34 32h23v17H34z"/><rect x="34" y="32" width="23" height="17" rx="2"/><path d="M30 52h30M43 37h6M22 39l12 5"/><circle class="bright-fill" cx="45.5" cy="40.5" r="1.8"/></svg></div>
+          <h3>Person</h3><p>Asks the coding agent</p>
+        </article>
+
+        <div class="packet" id="p-user" aria-hidden="true"><div class="packet-line"></div><span class="packet-label"><svg viewBox="0 0 18 18"><path d="M2.5 3.5h13v9h-7l-4 3v-3h-2z"/><path d="M5.5 7h7M5.5 9.5h4"/></svg>message</span></div>
+
+        <article class="actor" id="harness">
+          <button class="info" type="button" aria-label="More about the harness" aria-describedby="harnessTip">i<span class="tooltip" id="harnessTip" role="tooltip">The harness is the software around the model: chat UI, context, permissions, tool catalog, and execution loop. It—not the LLM—runs tools.</span></button>
+          <div class="actor-icon" aria-hidden="true"><svg viewBox="0 0 64 64"><rect class="soft-fill" x="7" y="7" width="50" height="50" rx="10"/><rect x="7" y="7" width="50" height="50" rx="10"/><circle class="mid-fill" cx="32" cy="32" r="12"/><path d="M25 25h14l5 7-5 7H25l-5-7z"/><circle cx="32" cy="32" r="4"/><circle class="bright-fill" cx="13" cy="18" r="2.4"/><circle class="bright-fill" cx="13" cy="32" r="2.4"/><circle class="bright-fill" cx="13" cy="46" r="2.4"/><path d="M15.5 18h7l5 8M15.5 32H20M15.5 46h7l5-8M44 32h9m-4-4 4 4-4 4"/><path d="M24 22a14 14 0 0 1 19 2m-3-1 3 1-1-3M40 42a14 14 0 0 1-19-2m3 1-3-1 1 3"/><path d="M22 10v5M42 10v5M22 49v5M42 49v5"/></svg></div>
+          <h3>Agent harness</h3><p>Coordinates and executes</p>
+        </article>
+
+        <div class="packet" id="p-model" aria-hidden="true"><div class="packet-line"></div><span class="packet-label"><svg viewBox="0 0 18 18"><path d="M3 5.5 9 2l6 3.5L9 9zM3 9l6 3.5L15 9M3 12.5 9 16l6-3.5"/></svg><span id="modelPacketLabel">context</span></span></div>
+
+        <article class="actor" id="model">
+          <button class="info" type="button" aria-label="More about the LLM" aria-describedby="modelTip">i<span class="tooltip" id="modelTip" role="tooltip">The LLM receives text and produces text or a structured tool request. It has no database connection and cannot execute code by itself.</span></button>
+          <div class="actor-icon" aria-hidden="true"><svg viewBox="0 0 64 64"><rect class="soft-fill" x="11" y="11" width="42" height="42" rx="9"/><rect x="11" y="11" width="42" height="42" rx="9"/><path d="M18 7v5m9-5v5m10-5v5m9-5v5M18 52v5m9-5v5m10-5v5m9-5v5M7 18h5m-5 9h5m-5 10h5m-5 9h5m40-28h5m-5 9h5m-5 10h5m-5 9h5"/><path d="m23 26 8-5 9 5 1 10-9 7-10-7zM31 21l1 22M23 26l18 10M22 36l18-10"/><circle class="bright-fill" cx="31" cy="21" r="2.3"/><circle class="bright-fill" cx="23" cy="26" r="2.3"/><circle class="bright-fill" cx="41" cy="26" r="2.3"/><circle class="bright-fill" cx="22" cy="36" r="2.3"/><circle class="bright-fill" cx="41" cy="36" r="2.3"/><circle class="bright-fill" cx="32" cy="43" r="2.3"/></svg></div>
+          <h3>LLM</h3><p>Reasons and requests</p>
+        </article>
+
+        <div class="thought" id="thought"><small><svg viewBox="0 0 16 16"><path d="M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3M3.4 3.4l2.1 2.1m5 5 2.1 2.1m0-9.2-2.1 2.1m-5 5-2.1 2.1"/></svg>Model decision</small>I need warehouse facts. I should request the approved tool.</div>
+        <div class="packet" id="p-exec" aria-hidden="true"><div class="packet-line"></div><span class="packet-label"><svg viewBox="0 0 18 18"><rect x="2.5" y="3" width="13" height="12" rx="2"/><path d="m5.5 7 2 2-2 2M9.5 11h3"/></svg>run program</span></div>
+
+        <article class="actor" id="program">
+          <button class="info" type="button" aria-label="More about the data program" aria-describedby="programTip">i<span class="tooltip" id="programTip" role="tooltip">This pre-built program is the design point that matters. A safe version is reviewed, narrow, tested, and predictable. Its return contract is the fixed rule for exactly what it may send back.</span></button>
+          <div class="actor-icon" aria-hidden="true"><svg viewBox="0 0 64 64"><rect class="soft-fill" x="8" y="8" width="48" height="48" rx="7"/><rect x="8" y="8" width="48" height="48" rx="7"/><path d="M8 18h48M14 13h1m5 0h1m5 0h1M15 25h17M15 31h12M15 37h9"/><path class="mid-fill" d="M35 25h15v13l-7.5 5L35 38z"/><path d="M35 25h15v13l-7.5 5L35 38z"/><path d="m39 33 2.5 2.5 5-6M16 47h26"/><circle class="bright-fill" cx="47" cy="47" r="3"/></svg></div>
+          <h3>Data program</h3><p>Controls what comes back</p>
+        </article>
+
+        <div class="packet bidirectional" id="p-data" aria-hidden="true"><div class="packet-line"></div><span class="packet-label"><svg viewBox="0 0 18 18"><rect x="2" y="3" width="14" height="12" rx="1"/><path d="M2 7h14M2 11h14M7 3v12M12 3v12"/></svg>SQL ↔ rows</span></div>
+
+        <article class="actor" id="snowflake">
+          <button class="info" type="button" aria-label="More about Snowflake" aria-describedby="snowflakeTip">i<span class="tooltip" id="snowflakeTip" role="tooltip">Snowflake authenticates the program, applies warehouse roles and policies, runs the SQL, and returns only what those controls permit.</span></button>
+          <div class="actor-icon" aria-hidden="true"><svg viewBox="0 0 64 64"><ellipse class="soft-fill" cx="30" cy="17" rx="20" ry="8"/><path d="M10 17v26c0 5 9 8 20 8s20-3 20-8V17"/><ellipse cx="30" cy="17" rx="20" ry="8"/><path d="M10 30c0 5 9 8 20 8 4 0 8-.5 11-1.5"/><rect class="mid-fill" x="31" y="29" width="27" height="24" rx="3"/><rect x="31" y="29" width="27" height="24" rx="3"/><path d="M31 36h27M31 44h27M40 29v24M49 29v24"/><path d="M20 12v10M15.5 14.5l9 5M24.5 14.5l-9 5"/></svg></div>
+          <h3>Snowflake</h3><p>Governed data source</p>
+        </article>
+
+        <div class="decision" id="decision">
+          <div class="decision-title">The decisive moment: what does the program return?</div>
+          <div class="return-gate"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M2 8h20M8 3v14M15 3v14M12 17v4m-3-3 3 3 3-3"/></svg>Program return boundary</div>
+          <div class="choices">
+            <button class="choice bad" type="button" data-choice="bad"><span class="choice-mark"><svg viewBox="0 0 32 32"><rect x="4" y="4" width="24" height="17" rx="2"/><path d="M4 10h24M12 4v17M20 4v17M10 27h12m-3-3 3 3-3 3"/></svg></span><span><b>Return raw rows</b><small>Names, account details, or a printed result set</small></span></button>
+            <button class="choice good" type="button" data-choice="good"><span class="choice-mark"><svg viewBox="0 0 32 32"><path d="M4 5h24l-9 10v9l-6 3V15z"/><path d="m17 9 3 3 6-7"/></svg></span><span><b>Return only the approved minimum</b><small>A receipt, safe aggregate, or governed artifact reference</small></span></button>
+          </div>
+        </div>
+
+        <div class="outcome bad" id="badOutcome" role="status">
+          <div class="return-route"><span>Program</span> → <span>Harness</span> → <span>LLM context</span></div>
+          <h4>Raw data enters the model's context.</h4>
+          <p>The harness feeds the tool result back to the LLM. Those values can now be processed by the model and may appear in the chat, transcript, caches, or logs—depending on the system's configuration. <strong>The boundary failed.</strong></p>
+          <table class="payload-table"><caption>Illustrative raw tool result</caption><thead><tr><th>Name</th><th>Account</th><th>Balance</th></tr></thead><tbody><tr><td>Jane Doe</td><td>4821</td><td>$18,442</td></tr><tr><td>Sam Lee</td><td>7316</td><td>$9,108</td></tr></tbody></table>
+        </div>
+        <div class="outcome good" id="goodOutcome" role="status">
+          <div class="return-route"><span>Program</span> → <span>Harness</span> → <span>LLM context</span></div>
+          <h4>The program returns only what was approved.</h4>
+          <p>The harness gives the LLM a receipt, a policy-approved aggregate, or a reference to a governed artifact. <strong>Raw row-level values do not enter context.</strong></p>
+          <span class="payload">{ status: "complete", rows_checked: 48312 }</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="control-deck">
+      <div class="step-avatar" id="stepAvatar" aria-hidden="true"></div>
+      <div class="step-copy" aria-live="polite"><strong id="stepTitle">A person starts with a business question.</strong><span id="stepText">No model, tool, or database is active yet.</span></div>
+      <button class="next-btn" id="nextBtn" type="button">Start the flow →</button>
+    </div>
+  </section>
+
+  <section class="principle narrow">
+    <div class="principle-card">
+      <div class="shield" aria-hidden="true"><svg viewBox="0 0 80 80"><path d="M40 7 67 17v19c0 18-11 30-27 38C24 66 13 54 13 36V17z"/><path d="m27 40 9 9 18-20"/></svg></div>
+      <div><span class="section-tag">The design principle</span><h2>Put a controlled program between the model and the data.</h2><p>This is <strong>indirection</strong>: the model requests a reviewed program instead of handling the rows itself. <strong>Let the LLM plan. Let narrow, tested, deterministic code compute.</strong> Predictable code is easier to govern—but it is safe only when its access and output are also controlled.</p><div class="pattern-compare"><div class="pattern bad"><b>Bad · direct handling</b>“Query the table, inspect the rows, and calculate the answer.”</div><div class="pattern good"><b>Better · controlled indirection</b>“Run the approved check and return only its safe result.”</div></div></div>
+    </div>
+  </section>
+
+  <section class="support">
+    <div class="wrap">
+      <div class="support-head"><span class="section-tag">Watch every return path</span><h2>Snowflake is not the only way data reaches context.</h2><p>Anything a tool exposes in its result—including printed output, errors, logs, and previews—can be fed back to the model. Data used only inside the controlled program stays out of context. The same boundary test applies everywhere: <strong>what comes back?</strong></p></div>
+      <div class="cards">
+        <article class="card warning"><div class="card-icon">▤</div><h3>Reading a local CSV</h3><p>If the agent runs <code>cat customers.csv</code> or asks a file tool to read it, those values can enter context. “Local” does not mean “invisible to the model.”</p></article>
+        <article class="card warning"><div class="card-icon">›_</div><h3>Printing from Python</h3><p>An aggregation may be safe; dumping the underlying DataFrame is not. Standard output and error output normally return to the harness.</p></article>
+        <article class="card warning"><div class="card-icon">⌕</div><h3>Preview and debug output</h3><p>Sample rows, stack traces, logs, notebook display calls, and “helpful” previews can expose values just as easily as a query result.</p></article>
+        <article class="card"><div class="card-icon">Σ</div><h3>Approved summaries</h3><p>Counts and aggregates still enter context. Use policy-approved thresholds and suppression rules: small groups and rare combinations can still reveal people.</p></article>
+        <article class="card"><div class="card-icon">↗</div><h3>Artifact references</h3><p>A path or object identifier is safer only when the agent cannot later read the raw artifact through another tool. Protect the whole path.</p></article>
+        <article class="card"><div class="card-icon">◈</div><h3>Human-provided results</h3><p>Pasting output into chat also sends it into context. A person should share only the minimum approved summary—or share nothing.</p></article>
+      </div>
+      <div class="rules-banner"><div class="symbol">⚠</div><div><h3>Rules are guidance, not a guaranteed boundary.</h3><p>“Never show sensitive data” is worth saying, but an LLM does not follow instructions perfectly. Enforce the boundary with approved tools, least-privilege Snowflake roles, masking, output limits, and deterministic return contracts—not trust alone.</p></div></div>
+    </div>
+  </section>
+
+  <section class="support">
+    <div class="wrap">
+      <div class="support-head"><span class="section-tag">There is still enormous value</span><h2>We can do a lot without giving the model raw data.</h2><p>The coding agent can create and improve the machinery around an analysis. Access to sensitive values is only one small part of the work.</p></div>
+      <div class="value-grid">
+        <article class="value-card"><span class="big-number">OPTION 01 · CONTROLLED EXECUTION</span><h3>Let the harness run an approved program.</h3><p>Useful when fast feedback matters and governance supports automated execution.</p><ul><li>Validate SQL syntax and schemas</li><li>Run tests and data-quality checks</li><li>Return approved counts, metrics, or status</li><li>Detect failures and revise the code</li><li>Repeat a documented workflow consistently</li></ul></article>
+        <article class="value-card human-loop"><span class="big-number">OPTION 02 · HUMAN EXECUTION</span><h3>Let the agent draft. Let a qualified person review and run.</h3><p>Useful when data access is too sensitive or automated execution is not approved.</p><ul><li>Agent drafts SQL, Python, tests, and runbooks</li><li>Person reviews data access, outputs, network calls, and write operations</li><li>Person runs with least privilege in the approved environment</li><li>Person shares only a safe summary if useful</li><li>If even the summary is sensitive, they share nothing</li></ul></article>
+      </div>
+      <div class="decision-strip"><h3>The human-in-the-loop route</h3><div class="route"><div class="route-box"><span><strong>1 · Agent writes</strong>SQL or program</span></div><div class="route-arrow">→</div><div class="route-box"><span><strong>2 · Person reviews &amp; runs</strong>Inside the governed environment</span></div><div class="route-arrow">→</div><div class="route-box"><span><strong>3 · Person decides</strong>Share a safe summary—or nothing</span></div></div></div>
+    </div>
+  </section>
+
+  <section class="close wrap">
+    <span class="section-tag">Take this with you</span>
+    <h2>Do not connect a curious model directly to sensitive data and hope it behaves.</h2>
+    <p>Put a narrow, reviewed, deterministic program in the middle. Control what it can access. Control what it returns. Apply the same rule to every later tool.</p>
+    <div class="close-rule">The LLM requests. The harness executes. The program controls what comes back.</div>
+  </section>
+</main>
+
+<footer><div class="wrap"><span>Leader guide · coding agents, context, and governed data</span><a href="data-context-guardrails.html">Read the detailed technical guardrails →</a></div></footer>
+
+<script>
+  (function () {
+    "use strict";
+    var step = 0;
+    var prompt = "Check yesterday’s portfolio totals in Snowflake.";
+    var steps = [
+      { title: "A person starts with a business question.", text: "No model, tool, or database is active yet.", button: "Start the flow →", show: ["person", "chatDemo"] },
+      { title: "The harness sends the message to the LLM.", text: "The request joins the instructions and relevant conversation in the model’s context.", button: "Send to the LLM →", show: ["person", "chatDemo", "harness", "p-user"] },
+      { title: "The LLM decides that it needs a tool.", text: "It can request an action, but it cannot execute code or connect to Snowflake by itself.", button: "See the tool request →", show: ["person", "harness", "p-user", "model", "p-model", "thought"] },
+      { title: "The LLM returns a structured tool request.", text: "This is a request back to the harness—not a database connection.", button: "Let the harness inspect it →", show: ["person", "harness", "model", "p-user", "p-model", "thought"] },
+      { title: "The harness validates and runs a pre-built program.", text: "Permissions and policy determine whether the request is allowed. The harness—not the LLM—performs the action.", button: "Run the data program →", show: ["person", "harness", "model", "p-user", "p-model", "program", "p-exec"] },
+      { title: "The program—not the model—talks to Snowflake.", text: "Snowflake applies its own roles and policies, then sends query results back to the program.", button: "Snowflake returns results →", show: ["person", "harness", "model", "program", "p-user", "p-model", "p-exec", "snowflake", "p-data"] },
+      { title: "Now the most important decision happens.", text: "Choose what the program hands back to the harness and, therefore, to the LLM.", button: "Select one of the two return paths", show: ["person", "harness", "model", "program", "snowflake", "p-user", "p-model", "p-exec", "p-data", "decision"] }
+    ];
+
+    var allIds = ["person", "chatDemo", "harness", "p-user", "model", "p-model", "thought", "program", "p-exec", "snowflake", "p-data", "decision", "badOutcome", "goodOutcome"];
+    var nextBtn = document.getElementById("nextBtn");
+    var stepTitle = document.getElementById("stepTitle");
+    var stepText = document.getElementById("stepText");
+    var stepReadout = document.getElementById("stepReadout");
+    var progressBar = document.getElementById("progressBar");
+    var typedPrompt = document.getElementById("typedPrompt");
+    var typingCursor = document.getElementById("typingCursor");
+    var modelPacket = document.getElementById("p-model");
+    var modelPacketLabel = document.getElementById("modelPacketLabel");
+    var stepAvatar = document.getElementById("stepAvatar");
+    var stage = document.getElementById("stage");
+    var typingTimer;
+
+    function typePrompt() {
+      clearInterval(typingTimer);
+      typedPrompt.textContent = "";
+      typingCursor.hidden = false;
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        typedPrompt.textContent = prompt;
+        typingCursor.hidden = true;
+        return;
+      }
+      var i = 0;
+      typingTimer = setInterval(function () {
+        typedPrompt.textContent = prompt.slice(0, ++i);
+        if (i >= prompt.length) {
+          clearInterval(typingTimer);
+          typingCursor.hidden = true;
+        }
+      }, 28);
+    }
+
+    function render() {
+      var data = steps[step];
+      stage.classList.remove("has-outcome");
+      allIds.forEach(function (id) {
+        var el = document.getElementById(id);
+        var isVisible = data.show.indexOf(id) !== -1;
+        el.classList.toggle("visible", isVisible);
+        el.inert = !isVisible;
+        el.setAttribute("aria-hidden", String(!isVisible));
+        el.classList.remove("active");
+      });
+      var activeByStep = ["person", "harness", "model", "model", "program", "snowflake", "program"];
+      var activeActor = document.getElementById(activeByStep[step]);
+      var activeIcon = activeActor.querySelector(".actor-icon");
+      activeActor.classList.add("active");
+      stepAvatar.innerHTML = activeIcon.innerHTML;
+      stepAvatar.style.color = window.getComputedStyle(activeIcon).color;
+      modelPacket.classList.toggle("bidirectional", step >= 3);
+      modelPacketLabel.textContent = step >= 3 ? "context ↔ tool request" : "context";
+      document.querySelectorAll(".packet").forEach(function (packet) { packet.classList.toggle("travel", packet.classList.contains("visible")); });
+      stepTitle.textContent = data.title;
+      stepText.textContent = data.text;
+      nextBtn.textContent = data.button;
+      nextBtn.disabled = step === steps.length - 1;
+      nextBtn.hidden = step === steps.length - 1;
+      stepReadout.textContent = "Step " + (step + 1) + " of " + steps.length;
+      progressBar.style.width = ((step + 1) / steps.length * 100) + "%";
+      if (step === 0) typePrompt();
+    }
+
+    function reset() {
+      step = 0;
+      nextBtn.onclick = null;
+      render();
+    }
+
+    nextBtn.addEventListener("click", function () {
+      if (step < steps.length - 1) { step += 1; render(); }
+    });
+    document.getElementById("resetBtn").addEventListener("click", reset);
+    document.querySelectorAll("[data-choice]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var choice = button.getAttribute("data-choice");
+        stage.classList.add("has-outcome");
+        document.getElementById("decision").classList.remove("visible");
+        document.getElementById(choice + "Outcome").classList.add("visible");
+        stepTitle.textContent = choice === "good" ? "Raw row-level data stays out of context." : "Raw data has crossed into context.";
+        stepText.textContent = choice === "good" ? "A narrow, tested return contract kept raw rows out of context." : "A prompt asking the model to be careful cannot undo this exposure.";
+        nextBtn.disabled = false;
+        nextBtn.hidden = false;
+        nextBtn.textContent = "Replay and try the other path ↺";
+        nextBtn.onclick = function () { reset(); nextBtn.onclick = null; };
+      });
+    });
+    render();
+  })();
+</script>
+</body>
+</html>

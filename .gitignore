@@ -1,0 +1,45 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+connections.toml
+*.pem
+*.key
+*.p8
+
+# Dependencies and build output
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.vite/
+.turbo/
+.pnpm-store/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+
+# Local data and databases
+*.db
+*.duckdb
+*.parquet
+*.arrow
+*.ipc
+*.csv
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*

@@ -1,0 +1,52 @@
+[project]
+name = "snowglobe"
+version = "0.1.0"
+description = "Governed Snowflake results for humans, outside AI agent context"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "Curtis Alexander" }]
+dependencies = [
+  "cryptography>=46.0,<47",
+  "mcp>=2.0,<3",
+  "pydantic>=2.12,<3",
+  "sqlglot>=30.17,<31",
+  "starlette>=0.49,<1",
+  "uvicorn>=0.35,<1",
+]
+
+[project.optional-dependencies]
+snowflake = [
+  "pyarrow>=21,<22",
+  "snowflake-connector-python>=4.7,<5",
+]
+
+[dependency-groups]
+dev = [
+  "httpx>=0.28,<1",
+  "pytest>=8.4,<9",
+  "pytest-cov>=6.2,<7",
+  "ruff>=0.12,<1",
+  "ty>=0.0.1a20,<1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/snowglobe"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --strict-config"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.ty.src]
+include = ["src", "tests"]
