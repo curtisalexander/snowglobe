@@ -12,7 +12,7 @@ Snowglobe needs a model-facing MCP control plane, a separately authenticated Arr
 ### Backend
 
 - Use Python 3.12+, `uv`, pytest, Ruff, and ty.
-- Use the official MCP Python SDK v2 and Streamable HTTP. Run its returned Starlette application directly rather than nesting it under an unnecessary framework.
+- Build Snowglobe's MCP surface with the official Python SDK's low-level `Server` API and Streamable HTTP. Snowglobe owns every handler, schema, validation rule, capability, and result byte; the SDK supplies protocol framing, negotiation, and transport. Run its returned Starlette application directly rather than nesting it under an unnecessary framework.
 - Use a separately deployable Starlette Result API. Control- and data-plane processes may share versioned internal packages, but do not share routes, authentication audiences, or public response contracts.
 - Use SQLGlot with explicit `read="snowflake"` and `write="snowflake"` dialects as the candidate AST parser and rewriter. It is a parser, not a security policy: Snowglobe must still reject unsupported nodes, allowlist resolved objects/functions, test dialect round trips, and rely on a least-privileged Snowflake role as an independent backstop.
 - Use the official Snowflake Python connector, PyArrow, and `cryptography`. Keep Snowflake/PyArrow dependencies in an optional integration extra until the synthetic proof needs them. Do not require the connector's broad `pandas` extra unless an Arrow spike proves it necessary.
@@ -32,7 +32,7 @@ Snowglobe needs a model-facing MCP control plane, a separately authenticated Arr
 
 ## Rationale
 
-The official MCP SDK v2 has first-class Streamable HTTP and Starlette support, including transport host/origin protections. Starlette is enough for both thin HTTP boundaries, so adding FastAPI would add a framework without reducing complexity. SQLGlot has an actively maintained Snowflake dialect, typed AST traversal, transformation, and Snowflake generation, while its documented normalization and dialect evolution make an adversarial corpus and version pin essential.
+The official MCP SDK v2 has first-class low-level handlers, Streamable HTTP, and Starlette support, including transport host/origin protections. Unlike its high-level decorator API, the low-level server advertises only registered capability families and does not derive, validate, wrap, or convert tool schemas and results. This lets Snowglobe own the full model-visible contract without reimplementing MCP negotiation and transport. Starlette is enough for both thin HTTP boundaries, so adding FastAPI would add a framework without reducing complexity. SQLGlot has an actively maintained Snowflake dialect, typed AST traversal, transformation, and Snowflake generation, while its documented normalization and dialect evolution make an adversarial corpus and version pin essential.
 
 DuckDB-Wasm already uses a worker internally, accepts Arrow IPC, and is supported by Vite's explicit worker/Wasm URL pattern. An outer application worker gives Snowglobe one lifecycle owner that can terminate the database on logout, expiry, or stream failure. Mosaic is a strong fit for DuckDB-backed linked views, but a polished table may favor a specialized virtual grid; measurement should decide that tradeoff.
 
@@ -51,6 +51,7 @@ These require the target environment and do not block the synthetic proof:
 ## Consequences
 
 - The repository contains real, buildable control-plane, data-plane, and viewer shells but no result-bearing endpoint.
+- The MCP implementation uses only explicit low-level `tools/list` and `tools/call` handlers; no resource or prompt capabilities are advertised.
 - MCP and Result API can be deployed and authenticated independently.
 - SQLGlot upgrades are security-sensitive and require corpus/round-trip tests.
 - The first implementation iteration should build the synthetic broker and identity seam before Snowflake execution.

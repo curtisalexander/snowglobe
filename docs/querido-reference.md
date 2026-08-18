@@ -25,6 +25,10 @@ Querido proves much of the basic Python connection path Snowglobe needs, but it 
 | Tooling | `pyproject.toml` | Adopt Python 3.12+, uv, pytest, Ruff, and ty for backend components |
 | Proposed MCP wrapper | `docs/research/mcp-wrapper-design.md` | Do not reuse subprocess/envelope/result behavior; only retain the small curated-tool principle |
 
+## Implementation status
+
+Snowglobe has implemented the strict read-only TOML loader and focused RSA private-key conversion/tests described below. The Snowflake connector constructor, request-scoped cursor lifecycle, incremental Arrow IPC path, cancellation registry, and AST policy remain planned work. Snowglobe's model-facing implementation is its own low-level MCP surface as recorded in [ADR 0002](decisions/0002-low-level-mcp.md); no Querido MCP code is reused.
+
 ## Configuration findings
 
 Querido's loader usefully:
@@ -40,10 +44,10 @@ Snowglobe needs a narrower read-only loader:
 1. Resolve the configuration file from one server deployment setting, with a documented local-development default.
 2. Fail closed when the file, `[connections]`, selected profile, or required field is absent.
 3. Reject unknown root/profile fields instead of forwarding arbitrary TOML to the Snowflake driver.
-4. Require exactly `account`, `user`, `authenticator`, `private_key_path`, `db`, `warehouse`, and `role` for the first schema.
+4. Require exactly `account`, `user`, `authenticator`, `private_key_path`, `database`, `warehouse`, and `role` for the first schema.
 5. Require `authenticator = "SNOWFLAKE_JWT"`.
 6. Select the profile from server configuration; never accept it in MCP input.
-7. Map `db` to the driver's `database` argument.
+7. Pass `database` directly to the driver's `database` argument.
 8. Validate that the config and key paths satisfy deployment file-permission policy without assuming every container secret mount uses Unix `0600`.
 9. Never expose config listing, cloning, writing, or “test connection” through MCP.
 
@@ -80,7 +84,7 @@ account
 user
 authenticator = SNOWFLAKE_JWT
 private_key = loaded PKCS#8 DER bytes
-database = configured db
+database = configured database
 warehouse
 role
 session_parameters = server-owned controls
@@ -187,7 +191,7 @@ Required focused tests:
 - strict TOML schema/version/profile selection and unknown-field rejection;
 - absent/malformed config without path or parser detail in MCP output;
 - generated PEM and DER RSA key loading plus all failure cases listed above;
-- exact driver keyword allowlist and `db` → `database` mapping;
+- exact driver keyword allowlist, including `database` without a local alias;
 - no interactive credential-cache/MFA flags;
 - configured role/warehouse cannot be overridden by tool input;
 - cursor registration, closure, and connection cleanup on success and every failure point;

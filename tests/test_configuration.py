@@ -12,13 +12,13 @@ account = "organization-account"
 user = "SNOWGLOBE_SERVICE_USER"
 authenticator = "SNOWFLAKE_JWT"
 private_key_path = "~/snowglobe-key.p8"
-db = "GOVERNED_DATABASE"
+database = "GOVERNED_DATABASE"
 warehouse = "SNOWGLOBE_WAREHOUSE"
 role = "SNOWGLOBE_READER"
 """
 
 
-def test_loads_exact_profile_and_maps_db(tmp_path: Path) -> None:
+def test_loads_exact_profile(tmp_path: Path) -> None:
     path = tmp_path / "connections.toml"
     path.write_text(VALID_CONFIG, encoding="utf-8")
 
@@ -33,6 +33,7 @@ def test_loads_exact_profile_and_maps_db(tmp_path: Path) -> None:
     [
         VALID_CONFIG.replace("schema_version = 1", "schema_version = 2"),
         VALID_CONFIG.replace("role =", 'unexpected = "value"\nrole ='),
+        VALID_CONFIG.replace("database =", "db ="),
         VALID_CONFIG.replace(
             'authenticator = "SNOWFLAKE_JWT"', 'authenticator = "externalbrowser"'
         ),

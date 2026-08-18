@@ -12,7 +12,7 @@ account = "organization-account"
 user = "SNOWGLOBE_SERVICE_USER"
 authenticator = "SNOWFLAKE_JWT"
 private_key_path = "/run/secrets/snowglobe_snowflake_key.p8"
-db = "GOVERNED_DATABASE"
+database = "GOVERNED_DATABASE"
 warehouse = "SNOWGLOBE_WAREHOUSE"
 role = "SNOWGLOBE_READER"
 ```
@@ -25,19 +25,21 @@ role = "SNOWGLOBE_READER"
 | `user` | Dedicated Snowglobe execution user |
 | `authenticator` | Must be `SNOWFLAKE_JWT` in the initial implementation |
 | `private_key_path` | Server-local PEM or DER private key; the key itself never belongs in TOML |
-| `db` | Approved default database; mapped to Snowflake connector parameter `database` |
+| `database` | Approved default database; passed directly to Snowflake connector parameter `database` |
 | `warehouse` | Dedicated bounded Snowglobe warehouse |
 | `role` | Least-privileged read role; never overridable by MCP input |
 
-The initial loader will reject missing or unknown fields. It will select a configured profile by server deployment configuration, not from tool input. Database, warehouse, role, authenticator, key path, and profile name are therefore operator policy—not agent-controlled query parameters.
+The current loader rejects missing or unknown fields and selects a named profile supplied by server deployment code, not tool input. Database, warehouse, role, authenticator, key path, and profile name are therefore operator policy—not agent-controlled query parameters.
 
-The private key loader will:
+The current private-key loader:
 
-1. expand and validate the configured server-local path;
-2. read PEM or DER key material;
-3. deserialize it with `cryptography`;
-4. convert it in memory to unencrypted PKCS#8 DER expected by `snowflake.connector.connect`; and
-5. avoid logging, tracing, serializing, or returning the path or key bytes.
+1. reads the expanded server-local path from the validated profile;
+2. reads PEM or DER key material;
+3. deserializes it with `cryptography`;
+4. converts it in memory to unencrypted PKCS#8 DER expected by `snowflake.connector.connect`; and
+5. avoids logging, tracing, serializing, or returning the path or key bytes.
+
+Config/key ownership and permission enforcement remains a Milestone 0 task because local files and container secret mounts require different policies. The present loader verifies readability but does not yet enforce a permission mode.
 
 Encrypted-key passphrases are intentionally not part of this first file contract. If needed, they must come from a secret manager or process secret—not a committed configuration file.
 

@@ -8,7 +8,7 @@ from typing import Any
 SCHEMA_VERSION = 1
 ROOT_FIELDS = frozenset({"schema_version", "connections"})
 PROFILE_FIELDS = frozenset(
-    {"account", "user", "authenticator", "private_key_path", "db", "warehouse", "role"}
+    {"account", "user", "authenticator", "private_key_path", "database", "warehouse", "role"}
 )
 
 
@@ -61,7 +61,7 @@ def load_profile(path: Path, profile_name: str) -> SnowflakeProfile:
         user=values["user"],
         authenticator=values["authenticator"],
         private_key_path=Path(values["private_key_path"]).expanduser(),
-        database=values["db"],
+        database=values["database"],
         warehouse=values["warehouse"],
         role=values["role"],
     )

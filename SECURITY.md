@@ -22,4 +22,6 @@ Changes involving any of the following require threat-model review and end-to-en
 - agent-host versions, model payload assembly, screenshots, or accessibility extraction; and
 - deployment topology or network policy.
 
+The MCP boundary uses explicit low-level handlers. Any MCP change must test the exact advertised capabilities and schemas, text and structured result channels, malformed and unknown calls, and canary absence. Do not replace this boundary with high-level decorators or a third-party MCP server without a superseding architecture decision and security review.
+
 See [PLAN.md](PLAN.md) for the required boundary and authorization test suites.

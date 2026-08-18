@@ -50,7 +50,7 @@ These are the starting constraints inherited from the architecture proposal.
 | Snowflake configuration | Server-only `connections.toml` profile with fixed account, user, JWT authenticator, key path, database, warehouse, and role |
 | Snowflake client | Official Python connector and PyArrow, adapting the minimal proven patterns from Querido |
 | Backend tooling | Python 3.12+, uv, pytest, Ruff, and ty, following Querido's proven project setup |
-| Backend framework | Official MCP Python SDK v2 + Streamable HTTP; separately deployable Starlette MCP and Result API apps |
+| Backend framework | Snowglobe-owned low-level MCP handlers using the official Python protocol/Streamable HTTP transport; separately deployable Starlette MCP and Result API apps |
 | SQL parser | SQLGlot Snowflake AST behind a deny-by-default Snowglobe policy and least-privileged role |
 | Frontend | React, TypeScript, Vite, Apache Arrow JS, and DuckDB-Wasm owned by a dedicated application worker |
 | JS workspace | npm workspaces; one viewer package does not justify additional monorepo tooling |
@@ -63,7 +63,7 @@ These are the starting constraints inherited from the architecture proposal.
 
 ## 4. Decisions and deployment inputs
 
-Phase 0 ends only when these choices are recorded. Proposed MVP defaults are included so planning can proceed.
+Foundation technology decisions are recorded. Phase 0 remains open until the environment-specific policy and deployment inputs below are resolved; they do not block the synthetic proof.
 
 | Decision | Proposed MVP default | Why it matters |
 |---|---|---|
@@ -81,18 +81,17 @@ Phase 0 ends only when these choices are recorded. Proposed MVP defaults are inc
 | Oversized results | Reject and ask the human to narrow | Server paging can be added only for a demonstrated use case |
 | Supported browsers | Current managed Chromium initially | Memory behavior and security controls need a testable endpoint baseline |
 
-Recorded in [ADR 0001](docs/decisions/0001-foundation-stack.md): runtime, MCP transport, ASGI boundary, parser candidate, frontend, worker ownership, workspace tooling, and a test-only initial broker strategy.
+Recorded in the [architecture decision log](docs/decisions/README.md): runtime, Snowglobe-owned low-level MCP surface, transport, ASGI boundary, parser candidate, frontend, worker ownership, workspace tooling, configuration vocabulary, and a test-only initial broker strategy.
 
 The following are required before a production pilot, but intentionally do not block the synthetic proof:
 
 1. Which coding-agent hosts and versions are in scope?
-2. Is the required promise “no row values” or the stronger base guarantee above?
-3. Which Snowflake databases, schemas, secure views, and data classifications may be queried?
-4. Is arbitrary read SQL essential, or can the initial product use query templates and approved views?
-5. Which OIDC provider will authenticate humans, and is a shared JWT Snowflake service identity acceptable for the intended data policies?
-6. What retention, audit, incident-response, and regulatory requirements apply?
-7. What representative result sizes, schemas, browsers, and endpoint memory tiers should benchmarks cover?
-8. Is polished spreadsheet interaction more important than the fastest integrated chart/table prototype? Use measured prototypes to inform this product preference.
+2. Which Snowflake databases, schemas, secure views, and data classifications may be queried?
+3. Is arbitrary read SQL essential, or can the initial product use query templates and approved views?
+4. Which OIDC provider will authenticate humans, and is a shared JWT Snowflake service identity acceptable for the intended data policies?
+5. What retention, audit, incident-response, and regulatory requirements apply?
+6. What representative result sizes, schemas, browsers, and endpoint memory tiers should benchmarks cover?
+7. Is polished spreadsheet interaction more important than the fastest integrated chart/table prototype? Use measured prototypes to inform this product preference.
 
 ## 5. Repository shape
 
@@ -111,9 +110,11 @@ snowglobe/
 ├── tests/
 │   └── ...                # unit tests; add boundary suites with Milestone 1
 ├── docs/
+│   ├── README.md
 │   ├── architecture-proposal.md
 │   └── decisions/         # architecture decision records
-└── assets/
+├── assets/
+└── AGENTS.md              # durable agent guardrails
 ```
 
 The scaffold intentionally contains no result-bearing route and returns `SERVICE_UNAVAILABLE` for every MCP submission. “Accepted” becomes possible only when the synthetic broker and authenticated ownership path exist.
@@ -169,11 +170,12 @@ Tasks:
 - [ ] Inventory every agent-accessible shell, file, browser, HTTP, screenshot, and MCP path in each proposed host.
 - [ ] Define human, agent, operator, and service identities plus trust boundaries.
 - [ ] Define result classification, retention, deletion, audit, and incident-response policy.
-- [ ] Adapt Querido's minimal Python Snowflake connection path: TOML loading, JWT/private-key conversion, cursor lifecycle, and Arrow batch retrieval.
-- [ ] Pin the Querido reuse baseline by commit and preserve attribution for any substantially copied fragment.
-- [ ] Build a strict read-only config loader: version check, exact root/profile shape, required/unknown fields, server-selected profile, and fail-closed missing-file behavior.
+- [x] Adapt Querido's narrow TOML loading and JWT/private-key conversion patterns.
+- [ ] Implement Snowglobe-owned Snowflake connection, cursor lifecycle, and incremental Arrow retrieval.
+- [x] Pin the Querido reuse baseline by commit and preserve attribution for any substantially copied fragment.
+- [x] Build a strict read-only config loader: version check, exact root/profile shape, required/unknown fields, server-selected profile, and fail-closed missing-file behavior.
 - [ ] Define config/key file permission policy for local hosts and mounted container secrets; Querido checks neither on read.
-- [ ] Extract and test RSA private-key loading with generated PEM/DER fixtures; cover malformed, encrypted-without-secret, missing, and unsupported keys without leaking paths or cryptography errors.
+- [x] Extract and test RSA private-key loading with generated PEM/DER fixtures; cover malformed, encrypted-without-secret, missing, and unsupported keys without leaking paths or cryptography errors.
 - [ ] Construct Snowflake driver kwargs from an explicit allowlist; never forward a configuration dictionary wholesale.
 - [ ] Exclude Querido's interactive credential-cache and MFA-token flags from the JWT service connection.
 - [ ] Spike persisted-result and incremental Arrow batch behavior without exposing `connections.toml`, private-key bytes, credentials, query IDs, or tokens to the agent environment.
@@ -185,7 +187,8 @@ Tasks:
 - [ ] Verify that `LIMIT K + 1` rewriting preserves top-level ordering and existing limit semantics for accepted queries.
 - [ ] Spike Arrow streaming through backpressure into a Web Worker and provisional DuckDB table.
 - [ ] Benchmark Mosaic/vgplot and Glide against the same synthetic Arrow viewport contract.
-- [ ] Record runtime, framework, parser, viewer, authentication, and deployment choices as decision records.
+- [x] Record foundation runtime, low-level MCP, parser, viewer, configuration, and deployment-boundary choices as decision records.
+- [ ] Record environment-specific authentication, identity, retention, and deployment choices when inputs are known.
 
 Exit criteria:
 
@@ -201,11 +204,11 @@ Exit criteria:
 
 #### MCP control plane
 
-- [ ] Implement `submit_read_query` with strict input and output schemas.
-- [ ] Generate 20–32 character random opaque request IDs with no embedded identity or query data.
-- [ ] Return only `accepted`/`rejected` and fixed reason codes.
+- [x] Implement the fail-closed low-level `submit_read_query` shell with strict input and output schemas.
+- [x] Generate 20–32 character random opaque request IDs with no embedded identity or query data.
+- [x] Return only `accepted`/`rejected` and fixed reason codes.
 - [ ] Map all unexpected exceptions to `SERVICE_UNAVAILABLE` at the final serialization boundary.
-- [ ] Prohibit MCP resources, prompts, notifications, embedded content, and result-reading tools.
+- [x] Prohibit MCP resources, prompts, notifications, embedded content, and result-reading tools.
 - [ ] Capture and scan stdout/stderr; ensure synthetic values cannot reach either stream.
 
 #### Synthetic broker and Result API
@@ -266,7 +269,7 @@ Exit criteria:
 - [ ] Load one named profile from the server-only `connections.toml` contract documented in `docs/configuration.md`.
 - [ ] Validate required and unknown fields; require `authenticator = "SNOWFLAKE_JWT"` in the initial implementation.
 - [ ] Read PEM or DER RSA private-key material from `private_key_path`, convert it in memory to unencrypted PKCS#8 DER for the connector, and never log or serialize it.
-- [ ] Map Snowglobe's `db` field to the connector's `database` parameter.
+- [ ] Pass Snowglobe's `database` field directly to the connector's `database` parameter.
 - [ ] Pass configured account, user, database, warehouse, and role to the connector; never accept role or warehouse overrides from MCP input.
 - [ ] Pass no interactive credential-cache/MFA settings; add only reviewed server-owned session parameters.
 - [ ] Preserve Arrow field names and types on the human data path; do not copy Querido's lowercase-column normalization.
@@ -363,11 +366,17 @@ Initial model-visible response:
 Rules:
 
 - `additionalProperties` is false at the schema and serialization boundaries.
+- The low-level server handwrites the schemas, validates arguments itself, and constructs both MCP result channels explicitly.
 - `status` is exactly `accepted` or `rejected`.
+- `request_id` is 20–32 URL-safe ASCII characters matching `^[A-Za-z0-9_-]{20,32}$`.
 - `reason_code` is exactly `NONE`, `INVALID_REQUEST`, `POLICY_REJECTED`, or `SERVICE_UNAVAILABLE`.
 - Accepted means only that the request entered the governed path.
 - The receipt does not reveal completion, result existence, result size, or database error detail.
 - Response size is capped and every emitted byte is schema validated.
+- Text content is compact JSON representing exactly the same fields as structured content.
+- Unknown tool names receive one fixed, non-reflective tool error with no structured content.
+- Snowglobe does not attach application `_meta`; transport-added server identity is fixed and must remain result-independent.
+- Initialization advertises tools only, with no resources or prompts capability.
 
 The Result API contract is intentionally not placed in MCP metadata or responses. It will be versioned separately and require an audience-bound human session.
 

@@ -35,13 +35,13 @@ Snowglobe is a proposed MCP server and single-page web application for a dual-ch
 
 ## Status
 
-Snowglobe is in **scaffold and architecture validation**. It is not ready for real credentials or sensitive data. The checked-in MCP tool deliberately rejects every query until the synthetic broker, human ownership binding, and policy path are implemented together.
+Snowglobe is in **scaffold and architecture validation**. It is not ready for real credentials or sensitive data. Its MCP surface uses explicit low-level handlers owned by Snowglobe; the official SDK supplies only protocol and Streamable HTTP transport machinery. The checked-in tool deliberately rejects every query until the synthetic broker, human ownership binding, and policy path are implemented together.
 
 - [Implementation plan](PLAN.md)
-- [Architecture proposal](docs/architecture-proposal.md)
+- [Documentation index](docs/README.md)
 - [Snowflake configuration](docs/configuration.md)
 - [Querido reuse audit](docs/querido-reference.md)
-- [Foundation stack decision](docs/decisions/0001-foundation-stack.md)
+- [Architecture decisions](docs/decisions/README.md)
 - [Security policy](SECURITY.md)
 
 The first milestone is a synthetic-data proof that unique result canaries are visible in the viewer but absent from every agent-visible channel, log, trace, URL, and error.
@@ -56,7 +56,7 @@ The first milestone is a synthetic-data proof that unique result canaries are vi
 
 ## Snowflake connection
 
-The server will use an operator-owned `connections.toml` profile with Snowflake key-pair authentication. Start from [`connections.example.toml`](connections.example.toml); never commit the real file or private key. Snowglobe borrows only the minimal connection, private-key loading, cursor lifecycle, and Arrow-fetch patterns from Querido.
+The server will use an operator-owned `connections.toml` profile with Snowflake key-pair authentication. Start from [`connections.example.toml`](connections.example.toml); never commit the real file or private key. Snowglobe has adapted Querido's narrow configuration and private-key patterns; connection lifecycle, request-scoped cursors, and incremental Arrow retrieval remain planned Snowglobe-owned work.
 
 ## Development
 
@@ -97,8 +97,9 @@ apps/viewer/          React/Vite SPA and DuckDB-Wasm worker
 src/snowglobe/        separately runnable MCP and Result API modules
 tests/                backend contract, configuration, key, and API tests
 docs/decisions/       architecture decision records
-docs/                 source design, configuration, and Querido audit
+docs/                 current docs plus retained source design material
 assets/               generated project artwork
+AGENTS.md              durable implementation and verification guardrails
 ```
 
 ## License
