@@ -5,7 +5,9 @@ import duckdbEhWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js
 import duckdbEhWasm from "@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url";
 import duckdbMvpWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url";
 import duckdbMvpWasm from "@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url";
+import { createIncrementalArrowSink } from "./arrow-ingest";
 import { ProvisionalResult } from "./result-stream";
+import { createViewport } from "./viewport";
 
 const bundles: duckdb.DuckDBBundles = {
   mvp: {
@@ -23,12 +25,15 @@ let connection: duckdb.AsyncDuckDBConnection | undefined;
 let provisionalResult: ProvisionalResult | undefined;
 const pendingTable = "_snowglobe_pending";
 const publishedTable = "snowglobe_result";
+const maximumViewportRows = 100;
+const maximumViewportBytes = 256 * 1024;
 
 type WorkerRequest =
   | { type: "initialize" | "destroy" | "abort"; sequence?: number }
   | { type: "stream-start"; maximumFrameBytes: number; sequence: number }
   | { type: "stream-chunk"; chunk: Uint8Array; sequence: number }
-  | { type: "stream-end"; sequence: number };
+  | { type: "stream-end"; sequence: number }
+  | { type: "viewport"; offset: number; limit: number; sequence: number };
 
 async function destroyDatabase(): Promise<void> {
   provisionalResult = undefined;
@@ -70,18 +75,19 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 
     if (event.data.type === "stream-start") {
       if (provisionalResult) throw new Error("stream already started");
-      provisionalResult = new ProvisionalResult(event.data.maximumFrameBytes, {
-        async insert(chunk) {
-          await activeConnection.insertArrowFromIPCStream(chunk, {
-            name: pendingTable,
-          });
-        },
-        async publish() {
-          await activeConnection.query(
-            `ALTER TABLE "${pendingTable}" RENAME TO "${publishedTable}"`,
-          );
-        },
-      });
+      provisionalResult = new ProvisionalResult(
+        event.data.maximumFrameBytes,
+        createIncrementalArrowSink(
+          activeConnection,
+          pendingTable,
+          event.data.maximumFrameBytes,
+          async () => {
+            await activeConnection.query(
+              `ALTER TABLE "${pendingTable}" RENAME TO "${publishedTable}"`,
+            );
+          },
+        ),
+      );
     } else if (event.data.type === "stream-chunk") {
       if (!provisionalResult) throw new Error("stream not started");
       await provisionalResult.push(event.data.chunk);
@@ -90,6 +96,26 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       await provisionalResult.finish();
       provisionalResult = undefined;
       self.postMessage({ type: "published" });
+    } else if (event.data.type === "viewport") {
+      if (
+        provisionalResult ||
+        !Number.isSafeInteger(event.data.offset) ||
+        event.data.offset < 0 ||
+        !Number.isSafeInteger(event.data.limit) ||
+        event.data.limit <= 0 ||
+        event.data.limit > maximumViewportRows
+      ) {
+        throw new Error("invalid viewport");
+      }
+      const table = await activeConnection.query(
+        `SELECT * FROM "${publishedTable}" LIMIT ${event.data.limit + 1} OFFSET ${event.data.offset}`,
+      );
+      self.postMessage({
+        type: "viewport",
+        sequence: event.data.sequence,
+        viewport: createViewport(table, event.data.limit, maximumViewportBytes),
+      });
+      return;
     } else {
       throw new Error("unknown message");
     }

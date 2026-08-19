@@ -5,10 +5,11 @@
 
 This document is the test design for the synthetic proof, not a production identity
 or storage architecture. Internal claim types, the test-only in-process broker,
-injected Result API authentication/authorization seams, and synthetic Arrow admission
-are implemented. MCP still rejects submissions, the default Result API authenticator
-denies all result access, and no real token authentication or Snowflake source is
-connected.
+injected Result API authentication/authorization seams, synthetic Arrow admission,
+and a bounded viewer viewport are implemented. The fixed-URL viewer now calls the
+credential-bearing Result API list and stream routes, but MCP still rejects
+submissions, the default Result API authenticator denies all result access, and no
+real token authentication or Snowflake source is connected.
 
 ## Security claims
 

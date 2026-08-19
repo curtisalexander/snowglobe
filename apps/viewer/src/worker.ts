@@ -1,10 +1,13 @@
+import type { Viewport } from "./viewport";
+
 export type WorkerState = "starting" | "ready" | "failed";
 
-type WorkerReply = { type: string; sequence?: number };
-type PendingReply = { resolve(): void; reject(): void };
+type WorkerReply = { type: string; sequence?: number; viewport?: Viewport };
+type PendingReply = { resolve(value: unknown): void; reject(): void };
 
 export type DatabaseWorker = {
   load(stream: ReadableStream<Uint8Array>, maximumFrameBytes: number): Promise<void>;
+  viewport(offset: number, limit: number): Promise<Viewport>;
   destroy(): void;
 };
 
@@ -29,8 +32,11 @@ export function startDatabaseWorker(
   const replies = new Map<number, PendingReply>();
 
   worker.onmessage = (event: MessageEvent<WorkerReply>) => {
-    if (event.data.type === "ack" && event.data.sequence !== undefined) {
-      replies.get(event.data.sequence)?.resolve();
+    if (
+      (event.data.type === "ack" || event.data.type === "viewport") &&
+      event.data.sequence !== undefined
+    ) {
+      replies.get(event.data.sequence)?.resolve(event.data.viewport);
       replies.delete(event.data.sequence);
       return;
     }
@@ -61,7 +67,7 @@ export function startDatabaseWorker(
   };
   worker.postMessage({ type: "initialize" });
 
-  const send = (message: object, transfer: Transferable[] = []): Promise<void> => {
+  const send = <T>(message: object, transfer: Transferable[] = []): Promise<T> => {
     if (failed) return Promise.reject(new Error("Database worker unavailable"));
     sequence += 1;
     return new Promise((resolve, reject) => {
@@ -78,13 +84,13 @@ export function startDatabaseWorker(
       await ready;
       const reader = stream.getReader();
       try {
-        await send({ type: "stream-start", maximumFrameBytes });
+        await send<void>({ type: "stream-start", maximumFrameBytes });
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          await send({ type: "stream-chunk", chunk: value }, [value.buffer]);
+          await send<void>({ type: "stream-chunk", chunk: value }, [value.buffer]);
         }
-        await send({ type: "stream-end" });
+        await send<void>({ type: "stream-end" });
       } catch (error) {
         await reader.cancel().catch(() => undefined);
         if (!failed) worker.postMessage({ type: "abort" });
@@ -92,6 +98,9 @@ export function startDatabaseWorker(
       } finally {
         reader.releaseLock();
       }
+    },
+    viewport(offset, limit) {
+      return send<Viewport>({ type: "viewport", offset, limit });
     },
     destroy() {
       if (failed) return;

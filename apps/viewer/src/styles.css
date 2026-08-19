@@ -58,6 +58,10 @@ h1 {
   line-height: 0.9;
 }
 
+h2 {
+  margin: 0;
+}
+
 .lede {
   max-width: 42rem;
   margin: 1.5rem 0 0;
@@ -116,6 +120,123 @@ aside {
   font-size: 0.85rem;
 }
 
+.results,
+.viewport {
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  border: 1px solid rgb(141 225 235 / 18%);
+  border-radius: 1rem;
+  background: rgb(4 20 28 / 52%);
+}
+
+.section-heading,
+.request-list li {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-heading > span,
+.request-list small,
+.viewport-note {
+  color: #9bbbc3;
+  font-size: 0.8rem;
+}
+
+.request-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1.25rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.request-list li {
+  padding: 1rem;
+  border: 1px solid rgb(141 225 235 / 16%);
+  border-radius: 0.65rem;
+  background: rgb(7 21 31 / 70%);
+}
+
+.request-list li > div {
+  display: grid;
+  gap: 0.3rem;
+}
+
+code {
+  color: #c3dfe6;
+  overflow-wrap: anywhere;
+}
+
+button {
+  padding: 0.65rem 0.9rem;
+  border: 1px solid #7ce7eb;
+  border-radius: 0.5rem;
+  color: #07151f;
+  background: #7ce7eb;
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+button:focus-visible,
+.table-scroll:focus-visible {
+  outline: 3px solid #eac469;
+  outline-offset: 3px;
+}
+
+button:disabled {
+  border-color: #5d777d;
+  color: #b7c5c8;
+  background: #334b51;
+  cursor: not-allowed;
+}
+
+.notice {
+  margin: 1.25rem 0 0;
+  color: #c3dfe6;
+}
+
+.table-scroll {
+  margin-top: 1.25rem;
+  overflow: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  color: #dceef2;
+  background: #07151f;
+}
+
+th,
+td {
+  max-width: 24rem;
+  padding: 0.7rem 0.8rem;
+  overflow: hidden;
+  border-bottom: 1px solid rgb(141 225 235 / 14%);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+th {
+  position: sticky;
+  top: 0;
+  color: #7ce7eb;
+  background: #0b2632;
+}
+
+.null {
+  color: #7f9ca4;
+  font-style: italic;
+}
+
+.viewport-note {
+  margin: 0.75rem 0 0;
+}
+
 @media (max-width: 42rem) {
   header {
     grid-template-columns: 7rem 1fr;
@@ -124,5 +245,10 @@ aside {
 
   .lede {
     grid-column: 1 / -1;
+  }
+
+  .request-list li {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

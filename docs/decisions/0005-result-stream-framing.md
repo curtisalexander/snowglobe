@@ -39,6 +39,11 @@ identity claim.
   stream.
 - Require the worker to keep ingested data provisional and destroy it unless the
   framing parser observes exactly one valid terminal completion frame.
+- Feed the continuous Arrow IPC payload through Arrow JS incrementally. Re-encode
+  only the current record batch as a complete batch-local IPC stream for DuckDB-Wasm,
+  because its insertion API treats each call as a complete stream; never buffer or
+  convert the complete result. Apply backpressure with at most one framed chunk
+  queued ahead of the Arrow reader.
 - Apply `Cache-Control: no-store`, a deny-by-default CSP, no-referrer, no-sniff, and
   frame-denial headers to every Result API response.
 
@@ -48,6 +53,8 @@ identity claim.
   condition.
 - The envelope is not raw Arrow IPC; the worker must incrementally remove framing
   before passing Arrow bytes to DuckDB-Wasm.
+- The Arrow JS bridge holds only parser state and the current record batch. DuckDB
+  remains the sole complete browser result copy.
 - A late failure can leave partial bytes only in provisional worker state, never in a
   published table.
 - Synthetic sources now supply Arrow record batches to the admission process defined

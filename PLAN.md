@@ -1,6 +1,6 @@
 # Snowglobe implementation plan
 
-**Status:** Architecture rebalanced; synthetic control/data components implemented but not yet connected end to end
+**Status:** Synthetic viewer reaches the authenticated Result API seam; public auth and MCP submission remain disconnected
 **Last updated:** August 19, 2026
 **Source:** [Snowflake MCP with zero-context query results](docs/architecture-proposal.md)
 
@@ -244,12 +244,14 @@ Exit criteria:
 
 #### Viewer
 
-- [ ] Authenticate the human and list only their recent requests at a fixed application URL.
-- [ ] Stream Arrow through a `ReadableStream` directly to a dedicated worker with backpressure.
-- [ ] Ingest into a hidden temporary in-memory DuckDB table.
-- [ ] Publish the table only after a valid completion marker.
+- [ ] Authenticate the human through a deployment-selected identity provider.
+- [x] List only the authenticated viewer's recent requests at a fixed application URL.
+- [x] Stream Arrow through a `ReadableStream` directly to a dedicated worker with backpressure.
+- [x] Ingest into a hidden temporary in-memory DuckDB table.
+- [x] Publish the table only after a valid completion marker.
 - [ ] Terminate the worker and destroy the database on error, overflow, expiry, logout, or close.
-- [ ] Render escaped cells in a virtualized table.
+- [x] Render escaped cells from one row- and byte-bounded DuckDB viewport.
+- [ ] Virtualize the table for larger viewport windows.
 - [ ] Implement deterministic DuckDB-backed pagination, projection, sorting, and filtering.
 - [ ] Add one bounded aggregate chart without sending raw rows to the UI thread.
 - [ ] Enforce a byte-bounded Arrow viewport cache and cancel stale scroll requests.
@@ -505,10 +507,11 @@ Completed in the current iteration:
 3. Confirmed that a second model-facing MCP does not isolate result data and selected one fixed standalone viewer URL/action instead.
 4. Retained incremental admission and failure-atomic browser publication as correctness, resource, and lifecycle controls rather than presenting them as host-isolation evidence.
 5. Added final MCP exception sanitization, stdout/stderr canary coverage, and a real Streamable HTTP client round trip.
+6. Connected the fixed viewer URL to the credential-bearing Result API list and stream routes, retained stream backpressure through the dedicated worker, and rendered one 50-row/256-KiB DuckDB viewport only after failure-atomic publication.
 
 Next:
 
-1. Finish the synthetic vertical slice: authenticate the human, list their requests at the fixed viewer URL, fetch the Result API stream, and render one bounded viewport.
+1. Select and implement the public human authentication adapter; the deployable Result API remains deny-all until that deployment input is known.
 2. Connect synthetic MCP acceptance only after verified ownership, policy admission, and broker submission succeed together.
 3. Build the base leak/authorization harness before connecting any sensitive Snowflake account.
 4. Time-box SQLGlot corpus/`K + 1` and Snowflake incremental Arrow spikes without joining them to the accepted path until their contracts hold.
