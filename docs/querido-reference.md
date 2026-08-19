@@ -27,7 +27,12 @@ Querido proves much of the basic Python connection path Snowglobe needs, but it 
 
 ## Implementation status
 
-Snowglobe has implemented the strict read-only TOML loader and focused RSA private-key conversion/tests described below. The Snowflake connector constructor, request-scoped cursor lifecycle, incremental Arrow IPC path, cancellation registry, and AST policy remain planned work. Snowglobe's model-facing implementation is its own low-level MCP surface as recorded in [ADR 0002](decisions/0002-low-level-mcp.md); no Querido MCP code is reused.
+Snowglobe has implemented the strict read-only TOML loader, focused RSA private-key
+conversion, explicit connector arguments, and one connection/cursor lifecycle per
+request. Incremental Snowflake Arrow retrieval, cancellation registration, and AST
+policy remain planned work. Snowglobe's model-facing implementation is its own
+low-level MCP surface as recorded in [ADR 0002](decisions/0002-low-level-mcp.md); no
+Querido MCP code is reused.
 
 ## Configuration findings
 

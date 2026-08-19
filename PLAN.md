@@ -178,6 +178,7 @@ JavaScript row store.
 #### Connection and execution
 
 - [x] Build Snowflake connector arguments from the explicit configuration allowlist.
+- [x] Own one connection and cursor lifecycle per request.
 - [ ] Add reviewed statement, queue, login, network, and detached-query settings.
 - [ ] Start execution asynchronously and register request/cursor before returning accepted.
 - [ ] Keep Snowflake query IDs, credentials, tokens, and driver errors private.
@@ -255,7 +256,7 @@ The architecture migration and explicit connector-argument builder are complete.
 next implementation item is the remaining **governed asynchronous Snowflake executor
 seam**:
 
-1. own one connection/cursor lifecycle per request;
+1. add request-scoped cursor registration and idempotent cancellation;
 2. submit work in the background and atomically publish a pending broker record before
    returning `accepted`;
 3. transition only to closed lifecycle states through MCP; and
