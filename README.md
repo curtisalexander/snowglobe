@@ -36,8 +36,10 @@ and viewer routes run in one process and bind to loopback for individual use.
 
 ## Status
 
-Snowglobe is still a test-environment MVP and is **not ready for real credentials or
-sensitive data**. Implemented pieces include:
+Snowglobe is still a test-environment MVP and is **not ready for production
+credentials, sensitive data, or routine analyst use**. One dedicated non-production
+test credential is permitted only under the
+[constrained MVP runbook](docs/constrained-mvp-runbook.md). Implemented pieces include:
 
 - explicit low-level MCP contracts for `submit_read_query` and
   `get_query_status`;
@@ -51,10 +53,11 @@ sensitive data**. Implemented pieces include:
 
 The submit tool returns `SERVICE_UNAVAILABLE` unless the supported launcher is
 explicitly given a local configuration file. The real executor and minimum browser
-boundary assurance now exist, but `SECURITY.md` still prohibits credentials until the
-Gate 5 constrained-test procedure in [`PLAN.md`](PLAN.md) is documented.
+boundary assurance and the [Gate 5 constrained-test runbook](docs/constrained-mvp-runbook.md)
+now exist. `SECURITY.md` authorizes only that constrained connected test.
 
 - [Implementation plan](PLAN.md)
+- [Constrained MVP test runbook](docs/constrained-mvp-runbook.md)
 - [Single-analyst architecture decision](docs/decisions/0008-single-analyst-loopback-runtime.md)
 - [Threat model](docs/threat-model.md)
 - [Security policy](SECURITY.md)
@@ -127,9 +130,9 @@ Validate the local profile and key without connecting to Snowflake:
 uv run snowglobe-preflight --config connections.toml --profile default
 ```
 
-The explicit `--connect` mode is reserved for the constrained MVP test procedure after
-the mandatory safety gates in [`PLAN.md`](PLAN.md) pass. It opens and closes one
-Snowflake cursor, executes no SQL, and prints only a fixed pass/fail message.
+The explicit `--connect` mode is permitted only by the constrained MVP test procedure.
+It opens and closes one Snowflake cursor, executes no SQL, and prints only a fixed
+pass/fail message.
 
 The local service's `--config connections.toml --profile default` options explicitly
 enable configured execution. They are likewise reserved for the Gate 5 procedure;

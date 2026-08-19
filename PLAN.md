@@ -1,6 +1,6 @@
 # Snowglobe implementation plan
 
-**Status:** Gates 1–4 are complete; the constrained connected MVP procedure is next
+**Status:** Gates 1–4 and Gate 5 documentation are complete; constrained environment setup is next
 **Last updated:** August 19, 2026
 **Current decision:** [ADR 0011](docs/decisions/0011-bounded-snowflake-execution.md)
 **Retained source proposal:** [architecture-proposal.md](docs/architecture-proposal.md)
@@ -138,14 +138,15 @@ The first connected environment must use:
 - an operator who can independently inspect Snowflake query history, cancellation,
   warehouse usage, and grants during the test.
 
-`SECURITY.md` continues to prohibit Snowflake credentials until every mandatory gate
-below is complete and the document is updated with the constrained test procedure.
+`SECURITY.md` permits one dedicated non-production test credential only under the
+documented constrained procedure. Production credentials, production datasets,
+sensitive data, and routine analyst use remain prohibited.
 
 ## 6. MVP delivery plan
 
-Items are ordered. Real credentials must not be configured in Snowglobe, and no real
-connection may be attempted, until Gates 1–4 are complete and `SECURITY.md` has been
-updated for the Gate 5 procedure.
+Items are ordered. Gates 1–4, the runbook, and the narrow security-policy exception are
+complete. The connected steps may now proceed only in the documented constrained
+environment and in the order below.
 
 ### Already complete — reusable foundation
 
@@ -245,9 +246,9 @@ MCP, logs, errors, URLs, browser persistence, or provisional worker state.
 
 ### Gate 5 — connected MVP test and release evidence
 
-- [ ] Document exact setup, launch, shutdown, cancellation, expiry, and restart steps
+- [x] Document exact setup, launch, shutdown, cancellation, expiry, and restart steps
   for the constrained Snowflake test environment.
-- [ ] Update `SECURITY.md` from “no credentials” to permit only the documented MVP
+- [x] Update `SECURITY.md` from “no credentials” to permit only the documented MVP
   test configuration once Gates 1–4 pass.
 - [ ] Configure the dedicated test profile and run the value-free preflight;
   independently verify its role grants, allowlisted objects, warehouse, and resource
@@ -363,7 +364,7 @@ virtualization, export, or polished packaging.
 
 ## 12. Immediate next items
 
-Gates 1–4 are complete. Document Gate 5's exact constrained-environment setup,
-operation, cancellation, expiry, restart, and evidence procedure next, then update
-`SECURITY.md` to permit only that procedure. Do not configure real credentials or
-attempt a Snowflake connection before those documentation steps are complete.
+Gates 1–4, the exact Gate 5 constrained-environment procedure, and its narrow security
+policy exception are complete. Configure the dedicated non-production test profile
+next, run the value-free preflight, and independently verify the role grants,
+allowlisted objects, warehouse, and resource monitor before any query is submitted.

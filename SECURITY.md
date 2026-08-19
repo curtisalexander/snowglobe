@@ -1,7 +1,9 @@
 # Security
 
-Snowglobe is currently a proof of concept. **Do not connect it to a production
-Snowflake account, use real credentials, or process sensitive data.**
+Snowglobe is currently a test-environment MVP. **Do not connect it to a production
+Snowflake account, use production credentials, process sensitive data, or use it for
+routine analyst work.** One dedicated non-production test credential may be used only
+under the constrained exception below.
 
 Snowglobe is designed for one analyst on one machine. The supported service entry
 point binds MCP and the local viewer backend to `127.0.0.1`; there is no viewer login,
@@ -20,6 +22,37 @@ same-host isolation. Software running as the analyst—including a powerful codi
 host—may be able to access local HTTP endpoints, the browser, screenshots, process
 memory, or displayed values. Snowglobe does not defend against that actor. Do not
 describe the viewer as “human-only” when the agent controls the same endpoint.
+
+## Constrained connected-MVP exception
+
+The [constrained Snowflake MVP test runbook](docs/constrained-mvp-runbook.md) is the
+only authorized connected use. This exception exists solely to collect Gate 5 release
+evidence and applies only while every condition below is true:
+
+- the account is dedicated non-production, or the test role is isolated from all
+  production access;
+- every accessible object contains only non-sensitive synthetic canary data;
+- a dedicated key-authenticated test user has no assigned role beyond the dedicated
+  read-only role, and the unavoidable `PUBLIC` role has no relevant object access;
+- that role has usage only on the reviewed test warehouse, database, and schema and
+  select only on explicitly approved test views;
+- a small dedicated warehouse is governed by an active administrator-owned resource
+  monitor;
+- an administrator independently verifies grants, objects, query history, warehouse
+  usage, cancellation, and termination throughout the test;
+- the local profile and key satisfy Snowglobe's ownership and permission checks,
+  remain outside version control and agent-visible artifacts, and are removed or
+  revoked after the campaign; and
+- Snowglobe is launched exactly as documented, binds only to `127.0.0.1`, and retains
+  result bytes only in the local viewer path.
+
+The exception permits only the documented value-free preflight connection and the
+documented connected test matrix. It does not permit production or sensitive data,
+broader grants, shared credentials, remote exposure, export, screenshots or retained
+results, ad hoc queries outside the allowlist, or continued use after a stopping
+condition fails. Stop the test immediately if the observed role, warehouse, database,
+views, grants, resource monitor, listener addresses, or output channels differ from
+the reviewed configuration.
 
 ## Reporting a vulnerability
 
@@ -44,5 +77,6 @@ structured content, malformed and unknown calls, and canary absence. Keep the ex
 low-level handlers; do not replace them with high-level decorators or a third-party
 Snowflake MCP without a superseding architecture decision.
 
-See [PLAN.md](PLAN.md), the [threat model](docs/threat-model.md), and
+See [PLAN.md](PLAN.md), the [connected-MVP runbook](docs/constrained-mvp-runbook.md),
+the [threat model](docs/threat-model.md), and
 [ADR 0008](docs/decisions/0008-single-analyst-loopback-runtime.md).

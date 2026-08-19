@@ -6,6 +6,8 @@
 - [Architecture decisions](decisions/README.md) — accepted technical and security decisions; these take precedence when older source material differs.
 - [Local threat model](threat-model.md) — loopback trust boundary, data flows, limitations, and required evidence.
 - [Snowflake configuration](configuration.md) — current `connections.toml` contract.
+- [Constrained MVP runbook](constrained-mvp-runbook.md) — exact non-production setup,
+  operation, lifecycle, shutdown, restart, and evidence procedure for Gate 5.
 - [Querido reuse audit](querido-reference.md) — pinned source review and reuse boundary.
 
 ## Retained source material
