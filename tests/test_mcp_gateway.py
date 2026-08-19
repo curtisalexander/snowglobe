@@ -12,8 +12,9 @@ from pytest import CaptureFixture, MonkeyPatch
 
 from snowglobe import mcp_gateway
 from snowglobe.broker import InProcessBroker
-from snowglobe.executor import BackgroundQueryExecutor, QueryPolicyRejected
+from snowglobe.executor import BackgroundQueryExecutor
 from snowglobe.mcp_gateway import app, server
+from snowglobe.sql_policy import QueryPolicyRejected
 
 
 class Source:

@@ -23,8 +23,9 @@ from snowglobe.contracts import (
     ReasonCode,
     ReceiptStatus,
 )
-from snowglobe.executor import BackgroundQueryExecutor, QueryPolicyRejected
+from snowglobe.executor import BackgroundQueryExecutor
 from snowglobe.runtime import broker
+from snowglobe.sql_policy import QueryPolicyRejected
 
 SUBMIT_TOOL_NAME = "submit_read_query"
 STATUS_TOOL_NAME = "get_query_status"

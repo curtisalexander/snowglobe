@@ -6,6 +6,7 @@ import duckdbEhWasm from "@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url";
 import duckdbMvpWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url";
 import duckdbMvpWasm from "@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url";
 import { createIncrementalArrowSink } from "./arrow-ingest";
+import { maximumResultBytes, maximumViewportRows } from "./mvp-limits";
 import { ProvisionalResult } from "./result-stream";
 import { createViewport } from "./viewport";
 
@@ -25,8 +26,6 @@ let connection: duckdb.AsyncDuckDBConnection | undefined;
 let provisionalResult: ProvisionalResult | undefined;
 const pendingTable = "_snowglobe_pending";
 const publishedTable = "snowglobe_result";
-const maximumViewportRows = 100;
-const maximumViewportBytes = 256 * 1024;
 
 type WorkerRequest =
   | { type: "initialize" | "destroy" | "abort"; sequence?: number }
@@ -113,7 +112,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       self.postMessage({
         type: "viewport",
         sequence: event.data.sequence,
-        viewport: createViewport(table, event.data.limit, maximumViewportBytes),
+        viewport: createViewport(table, event.data.limit, maximumResultBytes),
       });
       return;
     } else {

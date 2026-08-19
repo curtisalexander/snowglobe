@@ -12,10 +12,6 @@ AdmittedWork = Callable[[str], Awaitable[ArrowBatchSource]]
 QueryAdmission = Callable[[str, str], AdmittedWork]
 
 
-class QueryPolicyRejected(Exception):
-    """A deliberately detail-free policy rejection."""
-
-
 class BackgroundQueryExecutor:
     """Admit work synchronously, then run it behind one pending broker record."""
 

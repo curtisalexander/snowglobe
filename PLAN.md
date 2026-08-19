@@ -1,8 +1,8 @@
 # Snowglobe implementation plan
 
-**Status:** Migrated to a single-analyst loopback architecture; synthetic lifecycle and viewer paths exist, governed Snowflake execution does not
+**Status:** MVP connection/resource safety and minimum SQL policy are complete; the real Snowflake executor does not exist yet
 **Last updated:** August 19, 2026
-**Current decision:** [ADR 0008](docs/decisions/0008-single-analyst-loopback-runtime.md)
+**Current decision:** [ADR 0010](docs/decisions/0010-minimum-snowflake-select-policy.md)
 **Retained source proposal:** [architecture-proposal.md](docs/architecture-proposal.md)
 
 ## 1. Outcome
@@ -71,10 +71,11 @@ as the analyst.
 | Oversized results | Reject; never silently truncate or spill into browser storage |
 | Initial exclusions | Viewer auth, accounts, sharing, export, remote hosting, tenants, uploads, external DuckDB readers, telemetry |
 
-The in-process broker intentionally loses requests on restart. Before real use, choose
-either that explicit ephemeral behavior or a small local persistence mechanism for
-request lifecycle and private Snowflake retrieval handles. Do not solve restart
-durability by introducing multi-user infrastructure.
+The MVP intentionally uses an ephemeral in-process broker and loses requests on
+restart. This is acceptable only for the constrained test environment defined below,
+with short statement timeouts, detached-query controls, explicit cancellation, and
+documented restart behavior. Local restart durability is deferred; it must not be
+solved by introducing multi-user infrastructure.
 
 ## 4. Model-visible contracts
 
@@ -110,124 +111,229 @@ Rules:
 - internal query and driver failures return only `failed`; and
 - MCP advertises tools only, with no resources or prompts.
 
-## 5. Delivery milestones
+## 5. MVP target
 
-### Milestone 0 — foundation and architecture
+The next release target is a **test-environment MVP**, not a feature-complete analyst
+application. It proves one real path:
 
-- [x] Record Python, low-level MCP, SQLGlot, React, Arrow, and DuckDB-Wasm choices.
-- [x] Implement strict `connections.toml` loading and PEM/DER RSA key conversion.
-- [x] Pin and audit the narrow Querido reuse baseline.
-- [x] Define incremental Arrow admission and failure-atomic stream framing.
-- [x] Pivot identity and deployment decisions to one local analyst in ADR 0008.
-- [x] Replace viewer authentication/ownership with a local lifecycle broker.
-- [x] Add one loopback launcher for MCP and viewer routes sharing that broker.
-- [ ] Define local config/key permission policy.
-- [ ] Decide ephemeral-only versus restart-durable local request state.
+> Submit one governed read query through MCP, poll an opaque ID, execute it with a
+> fixed least-privileged Snowflake profile, and inspect a bounded result in the local
+> viewer without result-derived information crossing the MCP boundary.
 
-### Milestone 1 — synthetic local vertical slice
+The existing 50-row/256-KiB bounded viewport is sufficient for this MVP because the
+MVP admission budgets must not permit a result larger than that viewer can inspect.
+Pagination, sorting, filtering, charts, virtualization, durable requests, export, and
+polished packaging do not block the real Snowflake test.
 
-#### MCP and lifecycle
+### Required Snowflake test environment
 
-- [x] Implement closed `submit_read_query` shell; keep it fail-closed.
-- [x] Implement closed `get_query_status` lifecycle polling.
-- [x] Generate opaque IDs with no embedded SQL, identity, or Snowflake identifier.
-- [x] Model pending, complete, failed, cancelled, and expired states.
-- [x] Sanitize malformed calls and unexpected exceptions.
-- [x] Verify exact capabilities and a real Streamable HTTP round trip.
-- [x] Connect synthetic submission to a background executor as one atomic accepted path.
-- [x] Prove values and internal errors remain absent from process output around execution.
+The first connected environment must use:
 
-#### Local viewer backend and browser
+- a dedicated non-production account or isolated test role and only non-sensitive
+  canary data;
+- read access only to explicitly allowlisted test databases, schemas, and views;
+- a small dedicated warehouse with an administrator-owned resource monitor;
+- a dedicated local key/profile that cannot assume a broader role;
+- no production credentials, production datasets, or sensitive data; and
+- an operator who can independently inspect Snowflake query history, cancellation,
+  warehouse usage, and grants during the test.
 
-- [x] List recent local requests and look one up by opaque ID.
-- [x] Allow Arrow streaming only for complete requests.
-- [x] Enforce row, column, cell, serialized-byte, and decoded-byte limits.
-- [x] Omit terminal completion on source error, cancellation, expiry, or overflow.
-- [x] Ingest provisionally into in-memory DuckDB-Wasm and publish only on completion.
-- [x] Render one 50-row/256-KiB bounded viewport with escaped cells.
-- [ ] Destroy worker/database state on every error, expiry, cancellation, and close path.
-- [ ] Add deterministic DuckDB pagination, projection, sorting, and filtering.
-- [ ] Add one bounded aggregate chart.
-- [ ] Complete browser no-persistence and no-external-reader tests.
+`SECURITY.md` continues to prohibit Snowflake credentials until every mandatory gate
+below is complete and the document is updated with the constrained test procedure.
 
-#### Boundary harness
+## 6. MVP delivery plan
 
-- [ ] Seed canaries in values, column names, SQL, errors, Unicode, binary, and oversized cells.
-- [ ] Capture MCP traffic, stdout/stderr, logs, URLs, errors, and browser storage.
-- [ ] Assert canaries are visible in the local viewer and absent from MCP and persistence channels.
-- [ ] Verify pending/terminal status reveals no rows, schema, counts, sizes, timing,
-  Snowflake identifiers, or errors.
+Items are ordered. Real credentials must not be configured in Snowglobe, and no real
+connection may be attempted, until Gates 1–4 are complete and `SECURITY.md` has been
+updated for the Gate 5 procedure.
+
+### Already complete — reusable foundation
+
+- [x] Record the low-level MCP, SQLGlot, Snowflake connector, Arrow, React, and
+  DuckDB-Wasm architecture.
+- [x] Implement strict `connections.toml` loading, explicit connector arguments, and
+  PEM/DER RSA key conversion.
+- [x] Implement the closed submission and lifecycle contracts, opaque IDs, local
+  broker, and atomic synthetic background-executor seam.
+- [x] Implement the shared loopback-only MCP/viewer launcher.
+- [x] Implement request-scoped connection/cursor ownership and idempotent cancellation.
+- [x] Implement incremental Arrow admission, failure-atomic framing, provisional
+  DuckDB-Wasm ingestion, and a bounded escaped viewport.
+
+### Gate 1 — connection and resource safety
+
+- [x] Reject unsafe local config/private-key ownership or permissions and document the
+  supported permission policy.
+- [x] Define fixed MVP limits for statement, queue, login, network, request expiry,
+  rows, columns, cell bytes, Arrow bytes, decoded bytes, and browser result input; cap
+  the admitted result at no more than the existing 50-row/256-KiB viewer capacity.
+- [x] Configure detached-query behavior so disconnect/restart does not intentionally
+  leave unbounded work running; retain a short statement timeout as the backstop.
+- [x] Enforce one active Snowflake request per runtime for the MVP.
+- [x] Implement a value-free preflight command for local profile/key validation and an
+  explicitly enabled, result-free connection check. Gate 5 independently verifies
+  role grants, allowlisted objects, warehouse, and resource monitor configuration.
+
+Why this gate cannot be deferred: without it, a test can leak credentials, create
+orphaned work, overload the local process, or incur uncontrolled Snowflake cost before
+SQL and result handling are exercised.
+
+### Gate 2 — minimum SQL authorization policy
+
+- [x] Parse with SQLGlot's Snowflake dialect and accept exactly one `SELECT` or
+  `WITH … SELECT` statement.
+- [x] Recursively reject every unsupported AST node, including DDL, DML, calls,
+  scripting, dynamic SQL, stages, file transfer, external/network functions, and
+  unapproved UDFs.
+- [x] Require references to resolve only to configured database/schema/view and
+  function allowlists (empty for the MVP); reject ambiguous or incompletely qualified
+  references when they cannot be proven safe.
+- [x] Keep role, warehouse, database, profile, authenticator, and key path entirely
+  server-owned and unavailable as tool inputs.
+- [x] Apply and verify a semantics-preserving server-owned `K + 1` row cap so an
+  oversized result is detected rather than silently truncated.
+- [x] Port the hostile Querido fixtures and add Snowflake-specific attacks covering
+  comments, quoting, nested CTEs/subqueries, multiple statements, stages, dangerous
+  functions, and dialect round trips.
+
+Why this gate cannot be deferred: a parser alone does not prevent mutation, policy
+escape, external access, or execution against unintended objects. The least-privileged
+Snowflake role is an independent backstop, not a replacement for this policy.
+
+### Gate 3 — real asynchronous Snowflake executor
+
+- [ ] Connect configured work to the existing background-executor seam and establish
+  pending registration plus request-scoped cursor ownership before returning
+  `accepted`.
+- [ ] Execute the policy-approved, server-capped SQL with the reviewed timeout and
+  session settings from Gate 1.
+- [ ] Adapt `fetch_arrow_batches()` to the existing `ArrowBatchSource` contract and
+  retrieve incrementally with backpressure.
+- [ ] Preserve Arrow names/types and define the admitted empty-result schema and
+  completion behavior.
+- [ ] Enforce all compute and result limits before browser publication; reject
+  oversized results without silent truncation or local spill.
+- [ ] Never concatenate complete results, call `to_pylist()`, build full row
+  dictionaries, use `fetchall()`, or write result bytes to an agent-visible file.
+- [ ] Map execution, driver, cancellation, timeout, overflow, and cleanup failures to
+  value-free lifecycle states; never expose Snowflake IDs, SQL, credentials, tokens,
+  or driver errors through MCP or ordinary logs.
+- [ ] Close the cursor and connection and remove private broker associations on every
+  terminal path; make cancellation and expiry race-safe.
+
+Why this gate cannot be deferred: this is the missing production-shaped seam. A
+partially connected executor could return acceptance before work is controllable,
+retain credentials or handles, publish incomplete data, or bypass admission limits.
+
+### Gate 4 — minimum browser and boundary assurance
+
+- [ ] Destroy application-worker and DuckDB state on every stream error, overflow,
+  cancellation, expiry, request change, and viewer close path.
+- [ ] Complete no-IndexedDB, no-OPFS, no-service-worker-cache, no automatic-restore,
+  and no-external-reader tests.
+- [ ] Seed non-sensitive canaries in values, column names, SQL, internal errors,
+  Unicode, binary, empty results, multiple batches, and oversized cells/results.
+- [ ] Capture MCP traffic, stdout/stderr, ordinary logs, URLs, public errors, and
+  browser storage; assert canaries appear only in the local viewer data path.
+- [ ] Verify every pending and terminal MCP response contains only the closed receipt,
+  with no rows, schema, counts, sizes, timing, Snowflake identifiers, or errors.
 - [x] Verify the supported launcher and Vite server are loopback-only.
 
-Exit criteria: the synthetic submit → poll → paste/list ID → view journey works in one
-local runtime, incomplete data never publishes, and no complete dataset becomes a
-JavaScript row store.
+Why this gate cannot be deferred: the MVP's primary security claim is channel
+separation. A successful query is not sufficient evidence if values can leak through
+MCP, logs, errors, URLs, browser persistence, or provisional worker state.
 
-### Milestone 2 — governed asynchronous Snowflake execution
+### Gate 5 — connected MVP test and release evidence
 
-#### SQL policy
+- [ ] Document exact setup, launch, shutdown, cancellation, expiry, and restart steps
+  for the constrained Snowflake test environment.
+- [ ] Update `SECURITY.md` from “no credentials” to permit only the documented MVP
+  test configuration once Gates 1–4 pass.
+- [ ] Configure the dedicated test profile and run the value-free preflight;
+  independently verify its role grants, allowlisted objects, warehouse, and resource
+  monitor.
+- [ ] In the constrained environment, verify an allowed query from submit → pending →
+  complete → viewer and confirm its canary values appear only in the viewer.
+- [ ] Verify policy rejection before Snowflake execution for mutation, multiple
+  statements, disallowed objects/functions, stage access, and tool-selected config.
+- [ ] Verify empty, multi-batch, oversized, timeout, cancellation, driver-failure,
+  expiry, and process-restart behavior while inspecting Snowflake query history and
+  warehouse usage independently.
+- [ ] Run the complete Python, MCP, connector, stream, browser, build, and boundary
+  suites and retain value-free pass/fail evidence.
 
-- [ ] Accept exactly one parsed `SELECT` or `WITH … SELECT` statement.
-- [ ] Recursively deny DDL, DML, calls, scripting, dynamic SQL, stages, file transfer,
-  external/network functions, and unapproved UDFs.
-- [ ] Allowlist approved databases, schemas, views, and functions.
-- [ ] Deny tool-selected role, warehouse, profile, authenticator, key path, and database.
-- [ ] Apply a semantics-preserving server `K + 1` cap.
-- [ ] Port hostile Querido fixtures and add Snowflake-specific AST attacks.
+MVP exit criteria: one bounded real result completes the local viewer journey; unsafe
+SQL never executes; timeout, cancellation, overflow, and restart are bounded and
+documented; credentials and result-derived information remain absent from MCP and
+ordinary outputs; and the Snowflake role independently lacks mutation and unintended
+object access.
 
-#### Connection and execution
+## 7. Deferred until after the connected MVP
 
-- [x] Build Snowflake connector arguments from the explicit configuration allowlist.
-- [x] Own one connection and cursor lifecycle per request.
-- [ ] Add reviewed statement, queue, login, network, and detached-query settings.
-- [ ] Start execution asynchronously and register request/cursor before returning accepted.
-- [ ] Keep Snowflake query IDs, credentials, tokens, and driver errors private.
-- [x] Use one request-scoped cursor and idempotent cancellation; never cancel all cursors.
-- [ ] Retrieve `fetch_arrow_batches()` incrementally with backpressure.
-- [ ] Never concatenate full results, call `to_pylist()`, build full row dictionaries,
-  fall back to `fetchall()`, or place result bytes in a local agent-visible file.
-- [ ] Preserve Arrow names/types and an empty-result schema/completion contract.
-- [ ] Enforce compute and result limits before complete publication.
-- [ ] Transition to `failed` without exposing the failure through MCP.
-- [ ] Expire and clean up request associations and Snowflake handles.
+These items improve usefulness, resilience, or distribution but do not add evidence
+needed for the first constrained Snowflake test:
 
-Exit criteria: the least-privileged Snowflake role cannot mutate or escape policy;
-bounded real results complete the same local viewer journey; expensive and oversized
-queries stop independently; and all MCP canary tests remain green.
+### Viewer analysis and scale
 
-### Milestone 3 — useful bounded analysis
+- [ ] Add deterministic DuckDB pagination, projection, sorting, and filtering.
+- [ ] Add one bounded aggregate chart.
+- [ ] Virtualize visible rows/columns with bounded, cancellable columnar caches.
+- [ ] Return chart aggregates sized to display pixels rather than source cardinality.
+- [ ] Benchmark wide strings, nulls, large cells, sorting, aggregation, and rapid
+  scrolling.
 
-- [ ] Virtualize the table and query only visible rows/columns plus bounded overscan.
-- [ ] Normalize viewer filters, sorts, and projections into parameterized local SQL.
-- [ ] Keep viewport caches columnar, byte-bounded, and cancellable.
-- [ ] Return chart aggregates sized to display pixels, not source cardinality.
-- [ ] Benchmark strings, nulls, wide cells, sorting, aggregation, and rapid scrolling.
-- [ ] Confirm values never enter route state, titles, notifications, telemetry, or
-  persistence.
+### Durability and lifecycle convenience
 
-### Milestone 4 — individual-use hardening
+- [ ] Decide on and implement local restart-durable request state and private
+  retrieval handles.
+- [ ] Add automatic restoration only if a later persistence decision explicitly
+  changes the current ephemeral-browser boundary.
+- [ ] Add richer value-free operational diagnostics after the minimum boundary suite
+  establishes which metadata is safe.
 
-- [ ] Package one local launcher and viewer distribution with loopback defaults.
-- [ ] Add a single-runtime concurrency cap and value-free operational diagnostics.
-- [ ] Document key rotation, cancellation, expiry, cleanup, backup, and restart behavior.
-- [ ] Verify no LAN/public binding in supported startup paths.
-- [ ] Run the complete canary, SQL-policy, connector, stream, browser, and memory suite.
+### Packaging and broader hardening
 
-## 6. Test strategy
+- [ ] Package a polished local launcher and viewer distribution; the supported
+  loopback development launcher is sufficient for the MVP test.
+- [ ] Document key rotation and backup behavior beyond the minimum setup/restart
+  runbook.
+- [ ] Expand performance and memory testing beyond the fixed MVP budgets.
+- [ ] Revisit export, copy-all, uploads, external readers, remote hosting, sharing, or
+  multi-user operation only through new security decisions and threat models.
 
-| Layer | Primary evidence |
+## 8. MVP deferral risks
+
+| Deferred capability | Risk accepted for MVP | MVP constraint or mitigation | Trigger to implement |
+|---|---|---|---|
+| Restart-durable requests | A process restart loses local request IDs and results; an abruptly disconnected Snowflake query may remain visible briefly until server controls stop it | Non-production data, one active request, short statement timeout, detached-query controls, explicit shutdown/cancellation test | Before routine analyst use where restart recovery matters |
+| Pagination, sort, filter, and projection | Results larger than one bounded viewport must be rejected, limiting useful analysis | Cap admitted MVP results to the existing 50-row/256-KiB viewer capacity; never show a silently incomplete result | Immediately after the connected path is proven |
+| Charts and aggregate exploration | The viewer is a validation surface rather than a useful BI experience | Validate raw bounded rows only | After table navigation works |
+| Full virtualization and broad benchmarks | Results near admitted limits may render slowly or use more memory than desired | Conservative fixed MVP row/byte/memory limits and small test datasets | Before increasing limits or using representative workloads |
+| Polished packaging | Setup is manual and easier to misconfigure | One documented launcher and exact preflight procedure; loopback binding remains mandatory | Before distribution to another analyst |
+| Rich diagnostics | Failures may be harder to diagnose | Fixed lifecycle states, independent Snowflake history, and value-free test evidence | After safe diagnostic fields are explicitly reviewed |
+
+The following are **not accepted deferral risks** and remain MVP blockers: SQL AST
+authorization, least-privileged Snowflake grants, explicit timeouts and resource
+limits, incremental Arrow admission, failure-atomic browser publication, terminal
+cleanup, loopback binding, no browser persistence, and proof that MCP/log/error
+channels remain result-free.
+
+## 9. Test strategy
+
+| Layer | MVP evidence |
 |---|---|
-| MCP | exact two-tool capabilities, schema closure, text/structured parity, sanitization |
-| Lifecycle | pending and every terminal state; unknown IDs; expiry; idempotent cancellation |
-| Config/key | strict TOML shape, profile selection, PEM/DER conversion, secret-safe failures |
-| SQL policy | comments, quoting, CTE writes, multiple statements, stages, dangerous functions |
-| Connector | explicit kwargs, per-request cursor cleanup, async transition, incremental Arrow |
-| Stream | admission counters, backpressure, truncation, cancellation, overflow, completion marker |
-| Browser | lookup by ID, escaping, provisional publication, bounded viewport, no persistence |
-| Local runtime | MCP and viewer share one broker; supported host bindings are loopback |
-| Boundary | result canary visible in viewer and absent from MCP/output/storage |
+| MCP | exact two-tool capabilities, schema closure, text/structured parity, malformed/unknown-call sanitization, canary absence |
+| Lifecycle | pending and every terminal state; unknown IDs; expiry; race-safe idempotent cancellation |
+| Config/key | strict TOML shape, profile selection, safe permissions, PEM/DER conversion, secret-safe failures |
+| SQL policy | allowlisted reads plus comments, quoting, nested CTEs, multiple statements, stages, dangerous functions, and dialect round trips |
+| Connector | exact kwargs/session settings, one active request, per-request cleanup, timeout/cancellation, incremental Arrow |
+| Stream | real multi-batch and empty results, admission counters, backpressure, overflow, failure-atomic completion |
+| Browser | lookup by ID, escaping, provisional publication, bounded viewport, terminal destruction, no persistence |
+| Local runtime | one shared broker, loopback-only hosts, restart and shutdown behavior |
+| Boundary | viewer-visible canary absent from MCP, process output, URLs, errors, and browser storage |
+| Snowflake | read-only grants, object restrictions, resource monitor, query history, cancellation, and bounded warehouse use |
 
-## 7. Non-goals
+## 10. Non-goals
 
 - viewer authentication, OIDC, accounts, tenants, cross-user authorization, or sharing;
 - hosted or remotely exposed MCP/viewer services;
@@ -239,24 +345,25 @@ queries stop independently; and all MCP canary tests remain green.
 - export or copy-all in the initial product; and
 - adversarial isolation from other processes running as the analyst.
 
-## 8. Definition of done
+## 11. Definition of done
 
-The initial product is done when evidence supports this statement:
+The connected MVP is done when evidence supports this statement in the constrained
+Snowflake test environment:
 
 > One analyst can submit a governed Snowflake read query asynchronously, receive and
 > poll an opaque request ID through MCP, and use that ID to inspect the complete result
-> in a loopback-only local viewer. MCP emits only its closed receipt and lifecycle
-> contracts; result values, schema, sizes, Snowflake identifiers, and errors remain out
-> of MCP and ordinary logs. Result ingestion and browser analysis remain bounded and
-> ephemeral.
+> in a loopback-only local viewer. The SQL policy and least-privileged role prevent
+> mutation and unintended object access. MCP emits only its closed receipt and
+> lifecycle contracts; result values, schema, sizes, Snowflake identifiers, and errors
+> remain out of MCP and ordinary logs. Result ingestion and browser analysis remain
+> bounded and ephemeral.
 
-## 9. Immediate next item
+This definition does not require durable requests, advanced table navigation, charts,
+virtualization, export, or polished packaging.
 
-The architecture migration and explicit connector-argument builder are complete. The
-next implementation item is the remaining **governed asynchronous Snowflake executor
-seam**:
+## 12. Immediate next items
 
-1. expose incremental Arrow only to the local viewer after admission.
-
-Do not connect acceptance to real Snowflake until SQL AST policy and execution limits
-are enforced in the same path.
+Gates 1 and 2 are complete. Implement Gate 3's real asynchronous Snowflake executor
+next, connecting `fetch_arrow_batches()` to the existing executor and Arrow admission
+seams with terminal cleanup. Do not configure real credentials or connect acceptance
+to Snowflake before the applicable gates above are complete.

@@ -62,11 +62,15 @@ class InProcessBroker:
         self,
         *,
         maximum_ttl: timedelta = timedelta(minutes=15),
+        maximum_pending_requests: int | None = None,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         if maximum_ttl <= timedelta(0):
             raise ValueError("maximum_ttl must be positive")
+        if maximum_pending_requests is not None and maximum_pending_requests <= 0:
+            raise ValueError("maximum_pending_requests must be positive")
         self._maximum_ttl = maximum_ttl
+        self._maximum_pending_requests = maximum_pending_requests
         self._clock = clock or (lambda: datetime.now(UTC))
         self._records: dict[str, _RequestRecord] = {}
         self._lock = RLock()
@@ -83,6 +87,8 @@ class InProcessBroker:
             raise ValueError("requested_ttl must be positive")
 
         with self._lock:
+            if source is None and self._at_pending_capacity():
+                raise RequestUnavailable
             request_id = self._new_request_id()
             record = _RequestRecord(
                 request_id=request_id,
@@ -195,6 +201,15 @@ class InProcessBroker:
         while (request_id := secrets.token_urlsafe(18)) in self._records:
             pass
         return request_id
+
+    def _at_pending_capacity(self) -> bool:
+        if self._maximum_pending_requests is None:
+            return False
+        pending = sum(
+            self._refresh_expiry(record).status is RequestStatus.PENDING
+            for record in self._records.values()
+        )
+        return pending >= self._maximum_pending_requests
 
     def _now(self) -> datetime:
         now = self._clock()

@@ -7,12 +7,10 @@ import {
   openResultStream,
   type RequestSummary,
 } from "./result-api";
+import { maximumResultBytes, maximumViewportRows } from "./mvp-limits";
 import { startDatabaseWorker, type DatabaseWorker, type WorkerState } from "./worker";
 import type { Viewport } from "./viewport";
 import "./styles.css";
-
-const maximumFrameBytes = 8 * 1024 * 1024;
-const viewportRows = 50;
 
 const statusLabel: Record<WorkerState, string> = {
   starting: "Preparing private workspace…",
@@ -60,8 +58,8 @@ export function App() {
     setLoadingRequest(requestId);
     try {
       const stream = await openResultStream(requestId);
-      await databaseWorker.load(stream, maximumFrameBytes);
-      setViewport(await databaseWorker.viewport(0, viewportRows));
+      await databaseWorker.load(stream, maximumResultBytes);
+      setViewport(await databaseWorker.viewport(0, maximumViewportRows));
     } catch {
       databaseWorker.destroy();
       setWorkerState("failed");

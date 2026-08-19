@@ -5,12 +5,29 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from snowglobe.mvp_limits import (
+    MVP_LOGIN_TIMEOUT_SECONDS,
+    MVP_NETWORK_TIMEOUT_SECONDS,
+    MVP_QUEUED_TIMEOUT_SECONDS,
+    MVP_SOCKET_TIMEOUT_SECONDS,
+    MVP_STATEMENT_TIMEOUT_SECONDS,
+)
 from snowglobe.private_key import load_private_key
+from snowglobe.secure_file import SecureFileError, read_secure_file
 
 SCHEMA_VERSION = 1
 ROOT_FIELDS = frozenset({"schema_version", "connections"})
 PROFILE_FIELDS = frozenset(
-    {"account", "user", "authenticator", "private_key_path", "database", "warehouse", "role"}
+    {
+        "account",
+        "user",
+        "authenticator",
+        "private_key_path",
+        "database",
+        "warehouse",
+        "role",
+        "allowed_views",
+    }
 )
 
 
@@ -27,6 +44,7 @@ class SnowflakeProfile:
     database: str
     warehouse: str
     role: str
+    allowed_views: tuple[str, ...]
 
 
 def build_connector_arguments(profile: SnowflakeProfile) -> dict[str, object]:
@@ -40,6 +58,14 @@ def build_connector_arguments(profile: SnowflakeProfile) -> dict[str, object]:
         "database": profile.database,
         "warehouse": profile.warehouse,
         "role": profile.role,
+        "login_timeout": MVP_LOGIN_TIMEOUT_SECONDS,
+        "network_timeout": MVP_NETWORK_TIMEOUT_SECONDS,
+        "socket_timeout": MVP_SOCKET_TIMEOUT_SECONDS,
+        "session_parameters": {
+            "ABORT_DETACHED_QUERY": True,
+            "STATEMENT_QUEUED_TIMEOUT_IN_SECONDS": MVP_QUEUED_TIMEOUT_SECONDS,
+            "STATEMENT_TIMEOUT_IN_SECONDS": MVP_STATEMENT_TIMEOUT_SECONDS,
+        },
     }
 
 
@@ -47,7 +73,7 @@ def load_profile(path: Path, profile_name: str) -> SnowflakeProfile:
     """Load one server-selected profile, rejecting unknown or malformed input."""
 
     try:
-        document = tomllib.loads(path.read_text(encoding="utf-8"))
+        document = tomllib.loads(read_secure_file(path).decode("utf-8"))
         _require_exact_fields(document, ROOT_FIELDS)
         if document["schema_version"] != SCHEMA_VERSION:
             raise ConfigurationError
@@ -59,12 +85,18 @@ def load_profile(path: Path, profile_name: str) -> SnowflakeProfile:
         if not isinstance(profile, dict):
             raise ConfigurationError
         _require_exact_fields(profile, PROFILE_FIELDS)
-        values = {field: _required_string(profile[field]) for field in PROFILE_FIELDS}
+        values = {
+            field: _required_string(profile[field])
+            for field in PROFILE_FIELDS
+            if field != "allowed_views"
+        }
+        allowed_views = _required_string_list(profile["allowed_views"])
         if values["authenticator"] != "SNOWFLAKE_JWT":
             raise ConfigurationError
     except (
         KeyError,
         OSError,
+        SecureFileError,
         tomllib.TOMLDecodeError,
         UnicodeError,
         TypeError,
@@ -80,6 +112,7 @@ def load_profile(path: Path, profile_name: str) -> SnowflakeProfile:
         database=values["database"],
         warehouse=values["warehouse"],
         role=values["role"],
+        allowed_views=allowed_views,
     )
 
 
@@ -92,3 +125,12 @@ def _required_string(value: object) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ConfigurationError
     return value
+
+
+def _required_string_list(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list) or not value:
+        raise ConfigurationError
+    values = tuple(_required_string(item) for item in value)
+    if len(set(values)) != len(values):
+        raise ConfigurationError
+    return values

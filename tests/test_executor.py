@@ -6,7 +6,8 @@ import pyarrow as pa
 import pytest
 
 from snowglobe.broker import InProcessBroker, RequestStatus
-from snowglobe.executor import BackgroundQueryExecutor, QueryPolicyRejected
+from snowglobe.executor import BackgroundQueryExecutor
+from snowglobe.sql_policy import QueryPolicyRejected
 
 
 class Source:

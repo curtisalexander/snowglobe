@@ -77,6 +77,29 @@ def test_requests_are_listed_most_recent_first() -> None:
     assert broker.list_requests() == (second, first)
 
 
+def test_pending_request_capacity_is_atomic_and_reopens_after_terminal_state() -> None:
+    broker = InProcessBroker(maximum_pending_requests=1)
+    first = broker.submit(requested_ttl=timedelta(minutes=5))
+
+    with pytest.raises(RequestUnavailable, match=r"^$"):
+        broker.submit(requested_ttl=timedelta(minutes=5))
+
+    broker.fail(first.request_id)
+    second = broker.submit(requested_ttl=timedelta(minutes=5))
+
+    assert second.status is RequestStatus.PENDING
+
+
+def test_completed_synthetic_source_does_not_consume_pending_capacity() -> None:
+    broker = InProcessBroker(maximum_pending_requests=1)
+    pending = broker.submit(requested_ttl=timedelta(minutes=5))
+
+    complete = broker.submit(requested_ttl=timedelta(minutes=5), source=Source())
+
+    assert pending.status is RequestStatus.PENDING
+    assert complete.status is RequestStatus.COMPLETE
+
+
 def test_failed_cancelled_and_expired_requests_have_no_result_source() -> None:
     clock = Clock(datetime(2026, 8, 18, tzinfo=UTC))
     broker = InProcessBroker(clock=clock)

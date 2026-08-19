@@ -3,6 +3,7 @@
 import uvicorn
 
 from snowglobe.mcp_gateway import server
+from snowglobe.mvp_limits import MVP_ARROW_LIMITS
 from snowglobe.result_api import create_app as create_result_api
 from snowglobe.runtime import broker
 
@@ -10,7 +11,7 @@ from snowglobe.runtime import broker
 def create_app():
     """Serve MCP and viewer routes from the runtime that owns the local broker."""
 
-    result_api = create_result_api(broker=broker)
+    result_api = create_result_api(broker=broker, admission_limits=MVP_ARROW_LIMITS)
     application = server.streamable_http_app(
         stateless_http=True,
         json_response=True,

@@ -1,0 +1,113 @@
+from pathlib import Path
+
+import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+
+from snowglobe.preflight import main, run_preflight
+
+
+class FakeCursor:
+    def __init__(self, events: list[str]) -> None:
+        self._events = events
+
+    def cancel(self) -> None:
+        self._events.append("cursor.cancel")
+
+    def close(self) -> None:
+        self._events.append("cursor.close")
+
+
+class FakeConnection:
+    def __init__(self, events: list[str]) -> None:
+        self._events = events
+
+    def cursor(self) -> FakeCursor:
+        self._events.append("connection.cursor")
+        return FakeCursor(self._events)
+
+    def close(self) -> None:
+        self._events.append("connection.close")
+
+
+def write_profile(tmp_path: Path) -> Path:
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    key_path = tmp_path / "key.p8"
+    key_path.write_bytes(
+        key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+    )
+    key_path.chmod(0o600)
+    config_path = tmp_path / "connections.toml"
+    config_path.write_text(
+        f"""\
+schema_version = 1
+
+[connections.default]
+account = "organization-account"
+user = "SNOWGLOBE_SERVICE_USER"
+authenticator = "SNOWFLAKE_JWT"
+private_key_path = "{key_path}"
+database = "GOVERNED_DATABASE"
+warehouse = "SNOWGLOBE_WAREHOUSE"
+role = "SNOWGLOBE_READER"
+allowed_views = ["GOVERNED_DATABASE.GOVERNED_SCHEMA.APPROVED_VIEW"]
+""",
+        encoding="utf-8",
+    )
+    config_path.chmod(0o600)
+    return config_path
+
+
+def test_local_preflight_does_not_connect(tmp_path: Path) -> None:
+    config_path = write_profile(tmp_path)
+
+    def unexpected_connect(**_arguments: object) -> FakeConnection:
+        raise AssertionError("local preflight must not connect")
+
+    run_preflight(config_path, "default", connect=unexpected_connect)
+
+
+def test_connected_preflight_opens_no_query(tmp_path: Path) -> None:
+    config_path = write_profile(tmp_path)
+    events: list[str] = []
+
+    def connect(**arguments: object) -> FakeConnection:
+        assert arguments["role"] == "SNOWGLOBE_READER"
+        events.append("connect")
+        return FakeConnection(events)
+
+    run_preflight(config_path, "default", check_connection=True, connect=connect)
+
+    assert events == ["connect", "connection.cursor", "cursor.close", "connection.close"]
+
+
+def test_cli_output_does_not_expose_failure(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    canary = "PREFLIGHT_SECRET_CANARY"
+    missing_path = tmp_path / canary
+
+    assert main(["--config", str(missing_path)]) == 1
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "Snowglobe preflight failed.\n"
+    assert canary not in captured.err
+
+
+def test_cli_reports_value_free_success(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config_path = write_profile(tmp_path)
+
+    assert main(["--config", str(config_path)]) == 0
+
+    captured = capsys.readouterr()
+    assert captured.out == "Snowglobe preflight passed.\n"
+    assert captured.err == ""

@@ -112,7 +112,35 @@ npm run build
 
 The future Snowflake executor reads a local `connections.toml` profile. Start from
 [`connections.example.toml`](connections.example.toml); never commit the real file or
-private key.
+private key. Snowglobe accepts both files only when they are regular files owned by the
+current user, are not symlinks, and grant no permissions to the group or other users.
+The owner must have read permission and may have write permission (`0400` or `0600`):
+
+```bash
+chmod 600 connections.toml /path/to/snowflake-key.p8
+```
+
+Validate the local profile and key without connecting to Snowflake:
+
+```bash
+uv run snowglobe-preflight --config connections.toml --profile default
+```
+
+The explicit `--connect` mode is reserved for the constrained MVP test procedure after
+the mandatory safety gates in [`PLAN.md`](PLAN.md) pass. It opens and closes one
+Snowflake cursor, executes no SQL, and prints only a fixed pass/fail message.
+
+The constrained MVP accepts one pending request for at most five minutes. Connection
+timeouts are 30 seconds for login, 60 seconds for network retries, and 15 seconds per
+socket operation. Snowflake statements have a 60-second server deadline and a
+15-second queue deadline. Results are limited to 50 rows, 32 columns, 16 KiB per cell,
+and 256 KiB serialized and decoded Arrow so the complete admitted result fits the
+current viewer.
+
+Each profile also has an exact `allowed_views` list. MVP queries must reference one of
+those views as a fully qualified `DATABASE.SCHEMA.VIEW`. The initial function allowlist
+is intentionally empty: functions, UDFs, table functions, stages, variables, and
+partially qualified relations are rejected until separately reviewed.
 
 ## License
 

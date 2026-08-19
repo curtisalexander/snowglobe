@@ -12,3 +12,5 @@ Snowglobe records consequential technical and security decisions as architecture
 | [0006](0006-incremental-arrow-admission.md) | Accepted for synthetic proof | Incrementally validate and serialize actual Arrow record batches |
 | [0007](0007-assurance-levels-and-viewer-launch.md) | Superseded in part by [0008](0008-single-analyst-loopback-runtime.md) | Separate the base product boundary from optional endpoint certification; use a fixed standalone viewer |
 | [0008](0008-single-analyst-loopback-runtime.md) | Accepted | Single-analyst loopback runtime with result-free lifecycle polling |
+| [0009](0009-constrained-snowflake-mvp-budgets.md) | Accepted | Fixed connection, execution, concurrency, and result budgets for the constrained Snowflake MVP |
+| [0010](0010-minimum-snowflake-select-policy.md) | Accepted | Recursive Snowflake SELECT AST allowlist with approved views, no functions, and a server-owned overflow cap |

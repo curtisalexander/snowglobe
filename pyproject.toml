@@ -18,6 +18,7 @@ dependencies = [
 
 [project.scripts]
 snowglobe-local = "snowglobe.local_server:main"
+snowglobe-preflight = "snowglobe.preflight:main"
 
 [project.optional-dependencies]
 snowflake = [

@@ -8,3 +8,4 @@ private_key_path = "/run/secrets/snowglobe_snowflake_key.p8"
 database = "GOVERNED_DATABASE"
 warehouse = "SNOWGLOBE_WAREHOUSE"
 role = "SNOWGLOBE_READER"
+allowed_views = ["GOVERNED_DATABASE.GOVERNED_SCHEMA.APPROVED_VIEW"]
