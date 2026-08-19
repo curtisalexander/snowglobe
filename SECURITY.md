@@ -2,7 +2,9 @@
 
 Snowglobe is currently an architecture and proof-of-concept project. **Do not connect it to production Snowflake accounts, use real credentials, or process sensitive data.**
 
-The intended security property is not provided by MCP alone. It depends on independently authenticated control and data planes, least-privileged Snowflake access, strict result admission, browser controls, and certification of the exact agent host and deployment.
+The base security property is that Snowglobe creates no model-facing result channel. Its MCP surface emits only a schema-closed, result-independent receipt, while result bytes are available only through a separately human-authenticated and owner-authorized Result API. This property depends on independently authenticated control and data planes, least-privileged Snowflake access, strict result admission, and browser controls. Splitting the implementation into two model-facing MCP servers would not provide this separation because both return through the agent host.
+
+This base property does not claim that an authorized human, browser, extension, operating system, endpoint, or agent host cannot capture or redisclose displayed data. A deployment may make a stronger model-context exclusion claim only after testing and naming the exact agent host, browser, endpoint configuration, and versions. See [ADR 0007](docs/decisions/0007-assurance-levels-and-viewer-launch.md).
 
 ## Reporting a vulnerability
 
@@ -19,7 +21,7 @@ Changes involving any of the following require threat-model review and end-to-en
 - Arrow streaming, limits, logging, errors, tracing, or telemetry;
 - DuckDB-Wasm storage, extensions, external access, memory, or worker lifecycle;
 - browser caching, persistence, CSP, rendering, clipboard, export, or sharing;
-- agent-host versions, model payload assembly, screenshots, or accessibility extraction; and
+- model payload assembly, screenshots, accessibility extraction, or agent-host versions when a deployment makes the stronger certified claim; and
 - deployment topology or network policy.
 
 The MCP boundary uses explicit low-level handlers. Any MCP change must test the exact advertised capabilities and schemas, text and structured result channels, malformed and unknown calls, and canary absence. Do not replace this boundary with high-level decorators or a third-party MCP server without a superseding architecture decision and security review.

@@ -71,18 +71,21 @@ async def call_tool(
 ) -> CallToolResult:
     """Validate and dispatch a tool call without framework-generated output."""
 
-    if params.name != TOOL_NAME:
-        return CallToolResult(
-            content=[TextContent(type="text", text="Tool unavailable.")],
-            is_error=True,
-        )
+    try:
+        if params.name != TOOL_NAME:
+            return CallToolResult(
+                content=[TextContent(type="text", text="Tool unavailable.")],
+                is_error=True,
+            )
 
-    if not _valid_arguments(params.arguments):
-        return _receipt(ReasonCode.INVALID_REQUEST)
+        if not _valid_arguments(params.arguments):
+            return _receipt(ReasonCode.INVALID_REQUEST)
 
-    # The scaffold remains fail-closed until the synthetic broker, authenticated
-    # ownership binding, and policy service are implemented together.
-    return _receipt(ReasonCode.SERVICE_UNAVAILABLE)
+        # The scaffold remains fail-closed until the synthetic broker, authenticated
+        # ownership binding, and policy service are implemented together.
+        return _receipt(ReasonCode.SERVICE_UNAVAILABLE)
+    except Exception:
+        return _receipt(ReasonCode.SERVICE_UNAVAILABLE)
 
 
 def _valid_arguments(arguments: dict[str, Any] | None) -> bool:

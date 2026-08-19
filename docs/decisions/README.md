@@ -10,3 +10,4 @@ Snowglobe records consequential technical and security decisions as architecture
 | [0004](0004-synthetic-identities-and-broker.md) | Accepted for synthetic proof | Separate synthetic audiences and an ownership-enforcing in-process broker |
 | [0005](0005-result-stream-framing.md) | Accepted for synthetic proof | Owner-authorized Result API and failure-atomic Arrow stream framing |
 | [0006](0006-incremental-arrow-admission.md) | Accepted for synthetic proof | Incrementally validate and serialize actual Arrow record batches |
+| [0007](0007-assurance-levels-and-viewer-launch.md) | Accepted | Separate the base product boundary from optional endpoint certification; use a fixed standalone viewer |

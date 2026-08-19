@@ -1,7 +1,7 @@
 # Snowglobe implementation plan
 
-**Status:** Failure-atomic synthetic Arrow ingestion implemented through provisional browser publication
-**Last updated:** August 18, 2026  
+**Status:** Architecture rebalanced; synthetic control/data components implemented but not yet connected end to end
+**Last updated:** August 19, 2026
 **Source:** [Snowflake MCP with zero-context query results](docs/architecture-proposal.md)
 
 ## 1. Outcome
@@ -9,18 +9,20 @@
 Build and demonstrate a dual-channel system in which:
 
 1. an authenticated AI agent submits one governed Snowflake read query through MCP;
-2. MCP returns a constant-shape receipt containing no result-derived information;
+2. MCP returns a constant-shape, result-independent receipt;
 3. the result remains associated with the authenticated human on the server;
 4. a separately authenticated SPA streams an admitted result as Arrow IPC;
 5. a Web Worker loads the result into in-memory DuckDB-Wasm;
 6. the human explores it with deterministic table, filter, sort, aggregate, and chart operations; and
-7. seeded canary values never appear in model inputs, MCP output, agent-accessible tools, application logs, traces, URLs, browser persistence, or error text.
+7. seeded canary values remain absent from Snowglobe-owned agent-facing interfaces, logs, traces, URLs, errors, and browser persistence.
 
-The MVP is a proof of this information boundary, not a general-purpose Snowflake IDE.
+The MVP is a useful proof of this information boundary, not a general-purpose Snowflake IDE or a claim that software outside Snowglobe can never capture displayed data.
 
-## 2. Base guarantee
+## 2. Assurance levels
 
-Snowglobe begins with **no result-derived information** in the agent channel. The MCP response may indicate whether a request was accepted into the governed path, but it must not disclose:
+### 2.1 Base product guarantee
+
+Snowglobe creates no model-facing result channel. Its MCP response may indicate whether a request entered the governed path, but Snowglobe-owned agent-facing interfaces must not disclose:
 
 - rows or cell values;
 - column names or types;
@@ -31,7 +33,15 @@ Snowglobe begins with **no result-derived information** in the agent channel. Th
 - result-dependent timing intended as status feedback; or
 - charts, images, embedded resources, or downloadable artifacts.
 
+Result bytes are released only through a separately human-authenticated and owner-authorized Result API. Agent and MCP service identities cannot authenticate as viewers. This is the default product boundary and is testable without making claims about software Snowglobe does not control.
+
 Any later model-visible aggregate or status tool is a separately reviewed product with its own disclosure contract. It is not an extension of the base query tool.
+
+### 2.2 Certified deployment guarantee
+
+A deployment may additionally prove that displayed canaries do not enter model context for a named agent host, browser, endpoint configuration, and version set. That stronger claim requires host-specific capture tests for model payloads, screenshots, accessibility extraction, browser automation, host history, and similar paths. It is optional for the base product and must be rerun after relevant host or endpoint changes.
+
+An authorized human, browser, operating system, extension, endpoint, or agent host can still capture or redisclose viewer data. If the requirement is that a model provider must never receive displayed data, the viewer must run on an endpoint outside agent-controlled browser, screenshot, accessibility, shell, and file capabilities.
 
 ## 3. Accepted architecture decisions
 
@@ -43,6 +53,7 @@ These are the starting constraints inherited from the architecture proposal.
 | MCP output | Strict allowlisted `{status, request_id, reason_code}` receipt |
 | Data delivery | Authenticated Result API streams Arrow directly to the SPA; result bytes never transit MCP |
 | Viewer | Standalone deterministic SPA, not an MCP App for the MVP |
+| Viewer launch | One fixed application URL exposed by static host configuration, documentation, or a bookmark; no result-specific URL or second result-bearing MCP |
 | Browser analytics | In-memory DuckDB-Wasm in a dedicated Web Worker |
 | Browser persistence | No IndexedDB, OPFS, service-worker cache, or automatic restoration |
 | SQL | One parsed `SELECT` or `WITH … SELECT`; deny everything else |
@@ -67,7 +78,8 @@ Foundation technology decisions are recorded. Phase 0 remains open until the env
 
 | Decision | Proposed MVP default | Why it matters |
 |---|---|---|
-| Exact guarantee | No result-derived information | Determines the MCP contract and test oracle |
+| Base guarantee | No result-derived information through Snowglobe-owned agent-facing interfaces | Determines the MCP contract and base test oracle without overclaiming control of the endpoint |
+| Stronger assurance | Optional certification of one explicit host/browser/endpoint version set | Required only for a deployment claim about actual model context assembly or screen capture |
 | Allowed data | Synthetic data, then explicitly approved secure views | Prevents accidental broad access during development |
 | Query flexibility | Parsed read-only SQL over an object allowlist | Templates are safer; free-form SQL may still be a validated requirement |
 | Human authentication | Enterprise OIDC with audience-bound viewer sessions | Must be different from agent/service authorization |
@@ -75,17 +87,17 @@ Foundation technology decisions are recorded. Phase 0 remains open until the env
 | Result lifecycle | Short-lived persisted Snowflake result or server-held cursor | Avoids creating an additional unmanaged data copy |
 | Default TTL | 15 minutes for the proof; benchmark before production | Must be short without making ordinary use impractical |
 | Viewer library | Start with a minimal accessible viewport; prototype Mosaic/vgplot and compare a specialized grid before Milestone 3 | Choice must be driven by memory, accessibility, and viewport behavior |
-| Deployment boundary | Distinct MCP and Result API network/auth audiences | A route convention alone does not stop an agent from calling the data plane |
-| Agent hosts | Certify an explicit host/version allowlist | The server cannot control host logging or context assembly |
+| Deployment boundary | Distinct MCP and Result API auth audiences; separate network deployment when the threat model requires it | Logical identity separation is mandatory; duplicating code or processes is not |
+| Agent hosts | No host prerequisite for the base claim; certify explicit versions for the stronger claim | The server cannot control host logging, endpoint capture, or context assembly |
 | Export | Disabled | Export creates a separate governance and retention product |
 | Oversized results | Reject and ask the human to narrow | Server paging can be added only for a demonstrated use case |
 | Supported browsers | Current managed Chromium initially | Memory behavior and security controls need a testable endpoint baseline |
 
-Recorded in the [architecture decision log](docs/decisions/README.md): runtime, Snowglobe-owned low-level MCP surface, transport, ASGI boundary, parser candidate, frontend, worker ownership, workspace tooling, configuration vocabulary, and a test-only initial broker strategy.
+Recorded in the [architecture decision log](docs/decisions/README.md): runtime, Snowglobe-owned low-level MCP surface, transport, ASGI boundary, parser candidate, frontend, worker ownership, workspace tooling, configuration vocabulary, a test-only initial broker strategy, and the split between the base product boundary and optional endpoint certification.
 
 The following are required before a production pilot, but intentionally do not block the synthetic proof:
 
-1. Which coding-agent hosts and versions are in scope?
+1. Does the deployment need the stronger certified model-context claim, and if so which agent-host, browser, and endpoint versions are in scope?
 2. Which Snowflake databases, schemas, secure views, and data classifications may be queried?
 3. Is arbitrary read SQL essential, or can the initial product use query templates and approved views?
 4. Which OIDC provider will authenticate humans, and is a shared JWT Snowflake service identity acceptable for the intended data policies?
@@ -173,7 +185,7 @@ Tasks:
 
 - [ ] Answer the Phase 0 questions in section 4.
 - [x] Write a data-flow threat model covering model, host, MCP gateway, Snowflake, broker, Result API, browser, telemetry, and endpoint.
-- [ ] Inventory every agent-accessible shell, file, browser, HTTP, screenshot, and MCP path in each proposed host.
+- [ ] For a certified deployment, inventory every agent-accessible shell, file, browser, HTTP, screenshot, accessibility, and MCP path in the proposed host.
 - [x] Define human, agent, operator, and service identities plus trust boundaries.
 - [ ] Define result classification, retention, deletion, audit, and incident-response policy.
 - [x] Adapt Querido's narrow TOML loading and JWT/private-key conversion patterns.
@@ -193,12 +205,12 @@ Tasks:
 - [ ] Verify that `LIMIT K + 1` rewriting preserves top-level ordering and existing limit semantics for accepted queries.
 - [x] Spike Arrow streaming through backpressure into a Web Worker and provisional DuckDB table.
 - [ ] Benchmark Mosaic/vgplot and Glide against the same synthetic Arrow viewport contract.
-- [x] Record foundation runtime, low-level MCP, parser, viewer, configuration, and deployment-boundary choices as decision records.
+- [x] Record foundation runtime, low-level MCP, parser, viewer, configuration, deployment-boundary, assurance-level, and viewer-launch choices as decision records.
 - [ ] Record environment-specific authentication, identity, retention, and deployment choices when inputs are known.
 
 Exit criteria:
 
-- The security promise is written in testable language.
+- The base product promise and stronger certified claim are separately testable.
 - A parser can prove and rewrite the allowed SQL subset.
 - A connector path can produce bounded Arrow without row logging or full row-object conversion.
 - The chosen browser path loads provisionally, publishes atomically, and destroys state on failure.
@@ -213,9 +225,11 @@ Exit criteria:
 - [x] Implement the fail-closed low-level `submit_read_query` shell with strict input and output schemas.
 - [x] Generate 20–32 character random opaque request IDs with no embedded identity or query data.
 - [x] Return only `accepted`/`rejected` and fixed reason codes.
-- [ ] Map all unexpected exceptions to `SERVICE_UNAVAILABLE` at the final serialization boundary.
+- [x] Map all unexpected exceptions to `SERVICE_UNAVAILABLE` at the final serialization boundary.
 - [x] Prohibit MCP resources, prompts, notifications, embedded content, and result-reading tools.
-- [ ] Capture and scan stdout/stderr; ensure synthetic values cannot reach either stream.
+- [x] Verify the exact contract through the real Streamable HTTP transport.
+- [x] Capture and scan stdout/stderr for an unexpected canary-bearing MCP exception.
+- [ ] Capture and scan stdout/stderr around the eventual executor and driver.
 
 #### Synthetic broker and Result API
 
@@ -244,14 +258,15 @@ Exit criteria:
 #### Boundary harness
 
 - [ ] Seed unique canaries in cells, column names, malformed values, driver errors, Unicode, binary values, and oversized values.
-- [ ] Capture MCP traffic, model requests, host history, process output, logs, traces, metrics, URLs, browser storage, and errors.
-- [ ] Assert that canaries are visible in the authorized viewer and absent everywhere else.
+- [ ] Capture Snowglobe MCP traffic, process output, logs, traces, metrics, URLs, browser storage, and errors.
+- [ ] Assert that canaries are visible in the authorized viewer and absent from every Snowglobe-owned agent-facing or persistence channel.
 - [ ] Prove that unauthenticated, wrong-user, copied-URL, expired, agent, and service identities cannot retrieve data.
+- [ ] For a certified deployment, additionally capture model requests, host history, previews, screenshots, accessibility extraction, browser automation, and crash reporting.
 
 Exit criteria:
 
 - The complete synthetic user journey works.
-- All leak and authorization tests pass for one pinned host/browser combination.
+- Base leak and authorization tests pass independently of any host-specific certification.
 - A partial or oversized stream never becomes visible.
 - No code path materializes the full dataset as JavaScript rows.
 
@@ -322,27 +337,27 @@ Exit criteria:
 - Grid scrolling stays within the display-cache budget.
 - Security headers and browser non-persistence tests pass.
 
-### Milestone 4 — deployment and host certification
+### Milestone 4 — deployment hardening and optional host certification
 
-**Goal:** deploy a reviewable pilot and make the acceptance claim evidence-based.
+**Goal:** deploy a reviewable pilot and make only the assurance claims supported by evidence.
 
 - [ ] Deploy MCP and Result API with distinct network routes and auth audiences.
 - [ ] Ensure coding environments have no Snowflake credentials or access to result storage/API.
 - [ ] Restrict Result API CORS, CSP `connect-src`, and service identity access.
 - [ ] Add value-free operational metrics and allowlisted structured logs.
 - [ ] Add alerts for policy rejection spikes, cross-user attempts, unusual volume, and retention failures.
-- [ ] Capture exact model payloads and host persistence after MCP execution.
-- [ ] Test screenshots, accessibility extraction, previews, browser automation, crash reports, and prompt caches.
-- [ ] Pin and certify exact agent-host, server, and browser versions.
 - [ ] Run authorization review, penetration test, and retention/deletion verification.
 - [ ] Write operator runbooks for cancellation, revocation, incident response, key rotation, and host upgrades.
+- [ ] If the stronger claim is required, capture exact model payloads and host persistence after MCP execution.
+- [ ] If the stronger claim is required, test screenshots, accessibility extraction, previews, browser automation, crash reports, and prompt caches.
+- [ ] If the stronger claim is required, pin and certify exact agent-host, server, browser, and endpoint versions.
 
 Exit criteria:
 
-- Security, privacy, Snowflake, and agent-platform owners approve the scoped acceptance statement.
+- Security, privacy, and Snowflake owners approve the scoped base acceptance statement.
 - A pilot user can complete the journey under production-like identity and network controls.
 - Canary evidence is retained without retaining canary-bearing rows in ordinary telemetry.
-- Unknown or upgraded hosts fail closed until recertified.
+- Any stronger host-specific claim names the tested versions and expires when they change; untested hosts remain outside that claim unless real host attestation can make them fail closed.
 
 ### Milestone 5 — controlled usability, only after the boundary is proven
 
@@ -355,12 +370,12 @@ Candidate features, each requiring its own requirements and security review:
 - [ ] explicit human-approved disclosure of a bounded viewer selection to an agent;
 - [ ] reviewed metadata/catalog access;
 - [ ] narrow model-visible aggregate or `PASS`/`FAIL`/`SUPPRESSED` tools;
-- [ ] deterministic host-side “Open governed results” action outside model context; and
+- [ ] deterministic host-side “Open Snowglobe” action backed only by the static viewer URL; and
 - [ ] MCP App evaluation only for hosts that prove app-only data separation.
 
 ### Backlog idea — controlled viewer-to-agent disclosure
 
-After proving the zero-context boundary, evaluate an explicit workflow in which a human uses DuckDB-Wasm to project columns, filter rows, sort, and apply a small row limit, then deliberately discloses that exact subset to an agent. This is a **separate disclosure product**, not “sanitization” merely because fewer cells are selected, and it changes the guarantee for the disclosed subset: those values may enter model input, host history, logs, prompt caches, and provider retention.
+After proving the base product boundary, evaluate an explicit workflow in which a human uses DuckDB-Wasm to project columns, filter rows, sort, and apply a small row limit, then deliberately discloses that exact subset to an agent. This is a **separate disclosure product**, not “sanitization” merely because fewer cells are selected, and it changes the guarantee for the disclosed subset: those values may enter model input, host history, logs, prompt caches, and provider retention.
 
 Prototype the least-integrated option first:
 
@@ -431,8 +446,8 @@ The Result API contract is intentionally not placed in MCP metadata or responses
 | Authorization | cross-user, wrong audience, unauthenticated, revoked, expired, service identity |
 | Browser | escaping, CSP, no storage/cache, worker destruction, viewport-only conversion |
 | Performance | peak memory, ingestion rate, scroll latency, sort/aggregate working space |
-| End-to-end boundary | canary visible to human and absent from every captured agent-visible channel |
-| Host certification | exact model payload, transcript, traces, previews, screenshots, accessibility paths |
+| Base end-to-end boundary | canary visible to human and absent from Snowglobe-owned agent-facing and persistence channels |
+| Optional host certification | exact model payload, transcript, traces, previews, screenshots, accessibility paths |
 
 ### Required adversarial fixtures
 
@@ -463,26 +478,37 @@ Querido-derived regression fixtures additionally cover CTE-prefixed writes, mult
 - Supporting every browser, agent host, Snowflake identity pattern, or data domain in the first release.
 - Claiming that an authorized human, browser extension, OS, administrator, or future host can never disclose data.
 
-## 10. Definition of done for the proof
+## 10. Definitions of done
 
-The proof is done when evidence supports this scoped statement:
+### Base product proof
 
-> For the certified host, server, and browser versions, seeded query-result canaries are visible to the authorized user only in the governed Snowglobe viewer and are absent from all captured model inputs and agent-visible return channels. The MCP query tool returns only a schema-constrained receipt. Snowflake and viewer authorization are enforced independently, and alternate result-reading paths are denied.
+The base proof is done when evidence supports this statement:
 
-This statement must be rerun after changes to the host, MCP transport, authentication, connector, result handling, viewer, telemetry, browser policy, or deployment topology.
+> Snowglobe's model-facing interfaces emit only a schema-constrained, result-independent receipt. Query-result canaries are visible to the authorized human in the governed viewer and absent from Snowglobe-owned agent-facing interfaces, logs, traces, URLs, errors, and browser persistence. Viewer authorization is independent, and agent or service identities cannot retrieve results.
+
+This statement must be rerun after changes to MCP transport, authentication, connector, result handling, viewer, telemetry, browser policy, or deployment topology.
+
+### Optional certified deployment proof
+
+A deployment that also captures the exact model payload and host-managed channels may make this additional statement:
+
+> For the named agent-host, server, browser, endpoint configuration, and versions, seeded viewer canaries are absent from all captured model inputs and host-managed agent-visible channels.
+
+This stronger statement must be rerun after changes to any named component.
 
 ## 11. Immediate next iteration
 
 Completed in the current iteration:
 
-1. Added a bounded incremental parser for the versioned Result API framing contract.
-2. Passed each extracted Arrow IPC chunk to a fixed hidden DuckDB-Wasm table with per-chunk acknowledgements providing browser-side backpressure.
-3. Required both a valid completion frame and clean `ReadableStream` EOF before atomically renaming the provisional table for publication.
-4. Destroyed the worker-owned connection and in-memory database on framing, transport, insertion, publication, abort, or close failures.
-5. Added canary, arbitrary transport split, malformed frame, oversized frame, truncation, trailing byte, and provisional publication tests.
+1. Reviewed the complete trust model, implementation, and current MCP/MCP Apps behavior.
+2. Separated Snowglobe's testable base product boundary from optional host/browser/endpoint certification.
+3. Confirmed that a second model-facing MCP does not isolate result data and selected one fixed standalone viewer URL/action instead.
+4. Retained incremental admission and failure-atomic browser publication as correctness, resource, and lifecycle controls rather than presenting them as host-isolation evidence.
+5. Added final MCP exception sanitization, stdout/stderr canary coverage, and a real Streamable HTTP client round trip.
 
 Next:
 
-1. Connect MCP acceptance only after verified ownership, policy admission, and broker submission succeed together.
-2. Build the leak/authorization harness before connecting any sensitive Snowflake account.
-3. In parallel, time-box SQLGlot corpus/`K + 1` and Snowflake incremental Arrow spikes without joining them to the accepted path.
+1. Finish the synthetic vertical slice: authenticate the human, list their requests at the fixed viewer URL, fetch the Result API stream, and render one bounded viewport.
+2. Connect synthetic MCP acceptance only after verified ownership, policy admission, and broker submission succeed together.
+3. Build the base leak/authorization harness before connecting any sensitive Snowflake account.
+4. Time-box SQLGlot corpus/`K + 1` and Snowflake incremental Arrow spikes without joining them to the accepted path until their contracts hold.

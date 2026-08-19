@@ -1,7 +1,7 @@
 # Synthetic proof threat model
 
-**Status:** Initial Milestone 1 model
-**Last updated:** August 18, 2026
+**Status:** Milestone 1 base product model with optional certified-deployment extension
+**Last updated:** August 19, 2026
 
 This document is the test design for the synthetic proof, not a production identity
 or storage architecture. Internal claim types, the test-only in-process broker,
@@ -10,16 +10,27 @@ are implemented. MCP still rejects submissions, the default Result API authentic
 denies all result access, and no real token authentication or Snowflake source is
 connected.
 
-## Security claim
+## Security claims
+
+### Base product claim
 
 For the synthetic proof, result canaries may reach only the authenticated human's
-Result API response and ephemeral viewer worker. The agent receives the closed MCP
-receipt in `PLAN.md`; request status, result metadata, schemas, values, errors, and
-data-plane locations do not cross MCP.
+Result API response and ephemeral viewer worker through Snowglobe-owned interfaces.
+The agent receives the closed MCP receipt in `PLAN.md`; result status, metadata,
+schemas, values, errors, and data-plane locations do not cross MCP. Agent and service
+identities cannot authenticate to the Result API as viewers.
 
-This proof does not claim protection from the authorized human, their browser or
-operating system, a malicious browser extension, an administrator, or an
-uncertified agent host.
+This base proof does not claim protection from the authorized human, their browser or
+operating system, a malicious browser extension, an administrator, endpoint capture,
+or an agent host that can observe the separately rendered viewer.
+
+### Optional certified-deployment claim
+
+A deployment may additionally prove that canaries remain absent from actual model
+payloads and host-managed channels for a named agent host, browser, endpoint
+configuration, and version set. That evidence requires host-specific tests for
+screenshots, accessibility extraction, browser automation, previews, crash reports,
+prompt caches, and transcript persistence. It expires when a named component changes.
 
 ## Identities and trust boundaries
 
@@ -64,7 +75,7 @@ subject must match the stored owner on every list, open, cancel, and stream acti
 
 | Component | Data allowed | Primary threats | Required controls for the proof |
 |---|---|---|---|
-| Model and agent host | SQL, purpose, requested TTL, closed receipt | Host captures tool input/output; agent calls a copied data URL | No result-bearing MCP capability or URL; certify exact host and capture model/tool traffic |
+| Model and agent host | SQL, purpose, requested TTL, closed receipt | Host captures tool input/output; agent tries the fixed viewer URL or observes the human viewer | No result-bearing MCP capability or URL; Result API rejects agent identity; certify host/endpoint capture paths only for the stronger claim |
 | MCP gateway | Query inputs, verified agent/human association, receipt | Exceptions, logs, timing, or schemas disclose result facts | Closed schemas; fixed errors; value-free logs; final exception mapping; no resources/prompts |
 | Snowflake | Not used in Milestone 1 | Credentials or database errors enter the agent environment | Keep disconnected for the synthetic proof |
 | Broker | Owner, opaque request ID, status, expiry, private source handle | ID becomes bearer token; cross-user confusion; stale access | Independent viewer auth; owner check on every operation; short TTL; generic denial |
@@ -96,8 +107,12 @@ subject must match the stored owner on every list, open, cancel, and stream acti
 
 ## Required evidence
 
-The boundary harness must prove authorized visibility and canary absence across MCP
-traffic, model payloads, host history, stdout/stderr, application logs, traces,
-metrics, URLs, errors, and browser storage. Authorization tests must cover absent
-authentication, wrong audience, wrong user, copied request ID, service identity,
-revocation, cancellation, and expiry.
+The base boundary harness must prove authorized visibility and canary absence across
+Snowglobe MCP traffic, stdout/stderr, application logs, traces, metrics, URLs, errors,
+and browser storage. Authorization tests must cover absent authentication, wrong
+audience, wrong user, copied request ID, agent and service identities, revocation,
+cancellation, and expiry.
+
+A certified-deployment harness must additionally capture exact model payloads, host
+history, previews, screenshots, accessibility extraction, browser automation, crash
+reports, prompt caches, and transcript persistence for every named version.
