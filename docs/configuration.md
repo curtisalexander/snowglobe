@@ -1,6 +1,6 @@
 # Snowflake configuration
 
-Snowglobe's Snowflake execution service reads an operator-owned `connections.toml`. This file is a server configuration boundary: it must not be available to the coding-agent environment, SPA, browser, MCP responses, or ordinary logs.
+Snowglobe reads an analyst-owned local `connections.toml`. This file is a process configuration boundary: it must not be available to the SPA, browser, MCP responses, or ordinary logs. If the coding agent can read all files owned by the analyst, filesystem secrecy from that agent is not a product guarantee; use operating-system or secret-manager controls when that distinction matters.
 
 Use [`../connections.example.toml`](../connections.example.toml) as the starting point:
 
@@ -29,7 +29,7 @@ role = "SNOWGLOBE_READER"
 | `warehouse` | Dedicated bounded Snowglobe warehouse |
 | `role` | Least-privileged read role; never overridable by MCP input |
 
-The current loader rejects missing or unknown fields and selects a named profile supplied by server deployment code, not tool input. Database, warehouse, role, authenticator, key path, and profile name are therefore operator policy—not agent-controlled query parameters.
+The current loader rejects missing or unknown fields and selects a named profile supplied by local startup code, not tool input. Database, warehouse, role, authenticator, key path, and profile name are therefore analyst configuration—not agent-controlled query parameters.
 
 The current private-key loader:
 
@@ -51,4 +51,4 @@ Encrypted-key passphrases are intentionally not part of this first file contract
 - Do not place this configuration in an agent workspace or browser-served directory.
 - Do not add a CLI or MCP tool that prints the resolved profile.
 
-The configured Snowflake service identity does not replace human authorization. Snowglobe must bind every request to the authenticated human, enforce ownership in the Result API, and retain that opaque human association in its audit trail. Delegated per-user Snowflake identity remains a production evaluation item where row-access or masking policies depend on the actual user.
+The configured Snowflake identity is the analyst's local execution identity. Its role and Snowflake policies are the independent data-access boundary. Snowglobe does not add viewer accounts or a second human authorization layer.

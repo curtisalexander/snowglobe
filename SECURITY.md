@@ -1,29 +1,48 @@
 # Security
 
-Snowglobe is currently an architecture and proof-of-concept project. **Do not connect it to production Snowflake accounts, use real credentials, or process sensitive data.**
+Snowglobe is currently a proof of concept. **Do not connect it to a production
+Snowflake account, use real credentials, or process sensitive data.**
 
-The base security property is that Snowglobe creates no model-facing result channel. Its MCP surface emits only a schema-closed, result-independent receipt, while result bytes are available only through a separately human-authenticated and owner-authorized Result API. This property depends on independently authenticated control and data planes, least-privileged Snowflake access, strict result admission, and browser controls. Splitting the implementation into two model-facing MCP servers would not provide this separation because both return through the agent host.
+Snowglobe is designed for one analyst on one machine. The supported service entry
+point binds MCP and the local viewer backend to `127.0.0.1`; there is no viewer login,
+account system, tenant model, or sharing feature.
 
-This base property does not claim that an authorized human, browser, extension, operating system, endpoint, or agent host cannot capture or redisclose displayed data. A deployment may make a stronger model-context exclusion claim only after testing and naming the exact agent host, browser, endpoint configuration, and versions. See [ADR 0007](docs/decisions/0007-assurance-levels-and-viewer-launch.md).
+## Security property
+
+Snowglobe creates no result-bearing MCP channel. Its MCP surface may return an opaque
+request ID, fixed submission reason, and coarse lifecycle state. It must not return
+rows, schema, names, counts, sizes, timings, Snowflake identifiers, database errors,
+result locations, or result-derived artifacts. Admitted result bytes travel through
+the local viewer backend into the browser worker.
+
+Loopback binding reduces accidental remote exposure, but it is not authentication or
+same-host isolation. Software running as the analyst—including a powerful coding-agent
+host—may be able to access local HTTP endpoints, the browser, screenshots, process
+memory, or displayed values. Snowglobe does not defend against that actor. Do not
+describe the viewer as “human-only” when the agent controls the same endpoint.
 
 ## Reporting a vulnerability
 
-Do not include credentials, query results, personal data, or other sensitive values in an issue, transcript, screenshot, test fixture, or log. Until a private reporting channel is documented, contact the project owner privately before sharing vulnerability details.
+Do not include credentials, query results, personal data, or other sensitive values in
+an issue, transcript, screenshot, fixture, or log. Until a private reporting channel
+is documented, contact the project owner privately before sharing details.
 
 ## Security-sensitive changes
 
-Changes involving any of the following require threat-model review and end-to-end canary testing:
+Threat-model and canary review is required for changes to:
 
-- MCP response contracts or transport;
-- authentication, authorization, identity, or request ownership;
-- SQL parsing, validation, rewriting, or object/function policy;
-- Snowflake roles, warehouses, credentials, query tags, or result retrieval;
-- Arrow streaming, limits, logging, errors, tracing, or telemetry;
-- DuckDB-Wasm storage, extensions, external access, memory, or worker lifecycle;
-- browser caching, persistence, CSP, rendering, clipboard, export, or sharing;
-- model payload assembly, screenshots, accessibility extraction, or agent-host versions when a deployment makes the stronger certified claim; and
-- deployment topology or network policy.
+- MCP capabilities, schemas, results, transport, status, or errors;
+- local network binding, CORS, proxying, or deployment shape;
+- SQL parsing, policy, rewriting, roles, warehouses, or query execution;
+- Snowflake credentials, query tags, identifiers, or result retrieval;
+- broker lifecycle, cancellation, expiry, or local persistence;
+- Arrow admission, streaming, framing, logs, traces, or telemetry; or
+- browser caching, persistence, external access, rendering, export, or worker lifecycle.
 
-The MCP boundary uses explicit low-level handlers. Any MCP change must test the exact advertised capabilities and schemas, text and structured result channels, malformed and unknown calls, and canary absence. Do not replace this boundary with high-level decorators or a third-party MCP server without a superseding architecture decision and security review.
+MCP changes must verify exact capabilities and closed schemas, equivalent text and
+structured content, malformed and unknown calls, and canary absence. Keep the explicit
+low-level handlers; do not replace them with high-level decorators or a third-party
+Snowflake MCP without a superseding architecture decision.
 
-See [PLAN.md](PLAN.md) for the required boundary and authorization test suites.
+See [PLAN.md](PLAN.md), the [threat model](docs/threat-model.md), and
+[ADR 0008](docs/decisions/0008-single-analyst-loopback-runtime.md).

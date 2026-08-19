@@ -126,7 +126,7 @@ Unsafe behavior for Snowglobe:
 
 Snowglobe's executor must instead:
 
-1. bind one execution/cursor handle to one opaque request ID and authenticated owner;
+1. bind one execution/cursor handle to one opaque local request ID;
 2. preserve Snowflake/Arrow field names and types on the human data path;
 3. iterate Arrow tables/batches incrementally;
 4. inspect each batch before release and update row, column, cell, Arrow-byte, and memory estimates;
@@ -200,7 +200,7 @@ Required focused tests:
 - Arrow field names/types and empty-schema preservation;
 - per-batch row/byte/cell/memory overflow and final-batch overflow;
 - client disconnect, expiry, explicit cancellation, cancellation error, and idempotent repeated cancellation;
-- two simultaneous owners cannot stream or cancel each other's request;
+- cancellation remains scoped to one request and cannot affect another active request;
 - raw SQL, literals, driver messages, account, role, warehouse, and key path cannot appear in MCP/log captures;
 - the strict receipt remains byte/schema bounded under arbitrary internal exceptions; and
 - the ported adversarial SQL corpus is rejected or accepted by AST policy for the intended reason.

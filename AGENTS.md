@@ -1,19 +1,20 @@
 # Snowglobe agent guidance
 
-Snowglobe is a security-sensitive dual-channel system: an AI agent may submit a governed query, but query-result information must reach only a separately authenticated human viewer. Read `PLAN.md`, `SECURITY.md`, and the relevant ADRs in `docs/decisions/` before changing a boundary.
+Snowglobe is a security-sensitive single-analyst local system: an AI agent may submit and poll a governed query, but query-result bytes must travel only through the loopback viewer backend. Read `PLAN.md`, `SECURITY.md`, and the relevant ADRs in `docs/decisions/` before changing a boundary.
 
 ## Non-negotiable boundaries
 
-- MCP is control plane only. Never return rows, values, schema, counts, sizes, completion state, Snowflake identifiers, database errors, result URLs, images, resources, or other result-derived information through MCP.
-- The model-facing contract is exactly the allowlisted receipt documented in `PLAN.md`. Keep text and structured MCP content equivalent and schema-closed.
+- MCP is control plane only. It may return only the submission receipt and coarse lifecycle states documented in `PLAN.md`. Never return rows, values, schema, counts, sizes, timing, progress, Snowflake identifiers, database errors, result URLs, images, resources, or other result-derived information through MCP.
+- The model-facing contracts are exactly the allowlisted submission and lifecycle receipts documented in `PLAN.md`. Keep text and structured MCP content equivalent and schema-closed.
 - Use Snowglobe's explicit low-level `mcp.server.Server` handlers. Do not introduce `MCPServer`, `FastMCP`, high-level decorators, MCP resources/prompts, or a third-party Snowflake/Querido MCP server.
 - The official MCP SDK owns protocol framing and Streamable HTTP transport only. Snowglobe owns handlers, schemas, validation, capabilities, result construction, and public errors.
-- Result bytes travel through the separately authenticated Result API, never through MCP, local files visible to an agent, logs, traces, URLs, or shared metadata.
-- Fail closed. Do not add a placeholder path that accepts work before ownership, policy, admission, and failure-atomic publication exist together.
+- Result bytes travel through the loopback viewer backend, never through MCP, local files visible to an agent, logs, traces, URLs, or shared metadata.
+- Support one analyst in one local runtime. Do not add viewer authentication, accounts, tenants, ownership claims, sharing, or remote service exposure without a superseding decision and threat model.
+- Fail closed. Do not accept work before SQL policy, configured execution, pending-request registration, admission, and failure-atomic publication exist together.
 
 ## Snowflake and SQL
 
-- `connections.toml` is operator-owned and server-only. Its exact schema uses `database`, never `db`; unknown fields are rejected. Never commit the real file or a private key.
+- `connections.toml` is analyst-owned and local-process-only. Its exact schema uses `database`, never `db`; unknown fields are rejected. Never commit the real file or a private key.
 - Build Snowflake connector arguments from an explicit allowlist. Role, warehouse, database, profile, authenticator, and key path are never tool inputs.
 - Use SQLGlot with the Snowflake dialect for parsing/generation, then enforce a Snowglobe-owned recursive AST policy. A parser is not authorization.
 - Accept only the documented query subset and use a least-privileged Snowflake role as an independent backstop. Never use regex or first-keyword classification as the policy boundary.

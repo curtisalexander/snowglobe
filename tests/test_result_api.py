@@ -7,19 +7,10 @@ import pyarrow as pa
 import pytest
 from httpx import Response
 from starlette.applications import Starlette
-from starlette.requests import Request
 from starlette.testclient import TestClient
 
 from snowglobe.arrow_stream import ArrowAdmissionLimits, ArrowBatchSource
-from snowglobe.broker import (
-    AGENT_AUDIENCE,
-    VIEWER_AUDIENCE,
-    AgentClaims,
-    InProcessBroker,
-    RequestAccessDenied,
-    RequestView,
-    ViewerClaims,
-)
+from snowglobe.broker import InProcessBroker, RequestView
 from snowglobe.result_api import (
     ARROW_FRAME,
     COMPLETE_FRAME,
@@ -40,17 +31,6 @@ TEST_LIMITS = ArrowAdmissionLimits(
 
 
 @dataclass
-class Authenticator:
-    claims: ViewerClaims | None
-
-    async def authenticate(self, request: Request) -> ViewerClaims:
-        del request
-        if self.claims is None:
-            raise RequestAccessDenied
-        return self.claims
-
-
-@dataclass
 class Source:
     batches: tuple[pa.RecordBatch, ...]
     failure: Exception | None = None
@@ -65,22 +45,10 @@ class Source:
         return pa.schema([])
 
     async def open(self) -> AsyncIterator[pa.RecordBatch]:
-        for batch in self.batches:
-            yield batch
+        for item in self.batches:
+            yield item
         if self.failure is not None:
             raise self.failure
-
-
-def agent(owner: str = "human-a") -> AgentClaims:
-    return AgentClaims(
-        subject="agent-session",
-        human_subject=owner,
-        audience=AGENT_AUDIENCE,
-    )
-
-
-def viewer(subject: str = "human-a", audience: str = VIEWER_AUDIENCE) -> ViewerClaims:
-    return ViewerClaims(subject=subject, audience=audience)
 
 
 def submitted(
@@ -88,7 +56,6 @@ def submitted(
     source: ArrowBatchSource | None = None,
 ) -> RequestView:
     return broker.submit(
-        agent(),
         requested_ttl=timedelta(minutes=5),
         source=source or Source((batch(["arrow"]),)),
     )
@@ -101,14 +68,9 @@ def assert_security_headers(response: Response) -> None:
 
 def result_app(
     broker: InProcessBroker,
-    claims: ViewerClaims | None,
     admission_limits: ArrowAdmissionLimits = TEST_LIMITS,
 ) -> Starlette:
-    return create_app(
-        broker=broker,
-        authenticator=Authenticator(claims),
-        admission_limits=admission_limits,
-    )
+    return create_app(broker=broker, admission_limits=admission_limits)
 
 
 def parse_frames(body: bytes) -> list[tuple[int, bytes]]:
@@ -130,24 +92,24 @@ def batch(values: list[str]) -> pa.RecordBatch:
 
 
 def test_health_is_value_free_and_not_cached() -> None:
-    response = TestClient(create_app()).get("/healthz")
+    response = TestClient(create_app(broker=InProcessBroker())).get("/healthz")
 
     assert response.json() == {"status": "ok"}
     assert_security_headers(response)
 
 
-def test_default_app_denies_result_access() -> None:
-    response = TestClient(create_app()).get("/v1/requests")
+def test_default_local_api_lists_no_requests() -> None:
+    response = TestClient(create_app(broker=InProcessBroker())).get("/v1/requests")
 
-    assert response.status_code == 404
-    assert response.json() == {"error": "access_denied"}
+    assert response.status_code == 200
+    assert response.json() == {"requests": []}
     assert_security_headers(response)
 
 
-def test_authenticated_stream_fails_closed_without_explicit_admission_limits() -> None:
+def test_stream_fails_closed_without_explicit_admission_limits() -> None:
     broker = InProcessBroker()
     item = submitted(broker)
-    client = TestClient(create_app(broker=broker, authenticator=Authenticator(viewer())))
+    client = TestClient(create_app(broker=broker))
 
     response = client.get(f"/v1/requests/{item.request_id}/stream")
 
@@ -155,10 +117,10 @@ def test_authenticated_stream_fails_closed_without_explicit_admission_limits() -
     assert response.json() == {"error": "service_unavailable"}
 
 
-def test_list_open_and_cancel_are_owner_authorized() -> None:
+def test_list_open_and_cancel_local_requests() -> None:
     broker = InProcessBroker()
     item = submitted(broker)
-    client = TestClient(result_app(broker, viewer()))
+    client = TestClient(result_app(broker))
 
     listed = client.get("/v1/requests")
     opened = client.get(f"/v1/requests/{item.request_id}")
@@ -175,25 +137,17 @@ def test_list_open_and_cancel_are_owner_authorized() -> None:
     for response in (listed, opened, cancelled):
         assert_security_headers(response)
 
-    denied_stream = client.get(f"/v1/requests/{item.request_id}/stream")
-    assert denied_stream.status_code == 404
-    assert denied_stream.json() == {"error": "access_denied"}
+    unavailable_stream = client.get(f"/v1/requests/{item.request_id}/stream")
+    assert unavailable_stream.status_code == 404
+    assert unavailable_stream.json() == {"error": "not_found"}
 
 
-@pytest.mark.parametrize(
-    "claims",
-    [None, viewer(audience=AGENT_AUDIENCE)],
-)
-def test_all_denied_identities_receive_the_same_non_reflective_response(
-    claims: ViewerClaims | None,
-) -> None:
+def test_unknown_request_is_not_reflected() -> None:
     broker = InProcessBroker()
-    item = submitted(broker)
-    canary = f"{item.request_id}-CANARY"
-    client = TestClient(result_app(broker, claims))
+    canary = "UNKNOWN_REQUEST_CANARY"
+    client = TestClient(result_app(broker))
 
     responses = [
-        client.get("/v1/requests"),
         client.get(f"/v1/requests/{canary}"),
         client.post(f"/v1/requests/{canary}/cancel"),
         client.get(f"/v1/requests/{canary}/stream"),
@@ -201,34 +155,27 @@ def test_all_denied_identities_receive_the_same_non_reflective_response(
 
     for response in responses:
         assert response.status_code == 404
-        assert response.json() == {"error": "access_denied"}
+        assert response.json() == {"error": "not_found"}
         assert canary.encode() not in response.content
 
 
-def test_other_owner_lists_nothing_and_cannot_use_a_copied_request_id() -> None:
+def test_pending_request_is_visible_but_has_no_stream() -> None:
     broker = InProcessBroker()
-    item = submitted(broker)
-    client = TestClient(result_app(broker, viewer("human-b")))
+    item = broker.submit(requested_ttl=timedelta(minutes=5))
+    client = TestClient(result_app(broker))
 
-    listed = client.get("/v1/requests")
-    responses = [
-        client.get(f"/v1/requests/{item.request_id}"),
-        client.post(f"/v1/requests/{item.request_id}/cancel"),
-        client.get(f"/v1/requests/{item.request_id}/stream"),
-    ]
+    opened = client.get(f"/v1/requests/{item.request_id}")
+    streamed = client.get(f"/v1/requests/{item.request_id}/stream")
 
-    assert listed.status_code == 200
-    assert listed.json() == {"requests": []}
-    for response in responses:
-        assert response.status_code == 404
-        assert response.json() == {"error": "access_denied"}
+    assert opened.json()["status"] == "pending"
+    assert streamed.status_code == 404
 
 
 def test_stream_frames_arrow_and_emits_terminal_completion() -> None:
     broker = InProcessBroker()
     source = Source((batch(["first"]), batch(["second"])))
     item = submitted(broker, source)
-    client = TestClient(result_app(broker, viewer()))
+    client = TestClient(result_app(broker))
 
     response = client.get(f"/v1/requests/{item.request_id}/stream")
 
@@ -260,7 +207,6 @@ def test_incomplete_or_overflowing_stream_omits_completion_without_leaking_error
     client = TestClient(
         result_app(
             broker,
-            viewer(),
             replace(TEST_LIMITS, maximum_arrow_bytes=maximum_arrow_bytes),
         )
     )
@@ -282,17 +228,13 @@ def test_cancellation_during_stream_omits_later_bytes_and_completion() -> None:
 
         async def open(self) -> AsyncIterator[pa.RecordBatch]:
             yield batch(["first"])
-            broker.cancel(viewer(), self.request_id)
+            broker.cancel(self.request_id)
             yield batch(["must-not-be-released"])
 
     source = CancellingSource()
-    item = broker.submit(
-        agent(),
-        requested_ttl=timedelta(minutes=5),
-        source=source,
-    )
+    item = broker.submit(requested_ttl=timedelta(minutes=5), source=source)
     source.request_id = item.request_id
-    client = TestClient(result_app(broker, viewer()))
+    client = TestClient(result_app(broker))
 
     response = client.get(f"/v1/requests/{item.request_id}/stream")
 

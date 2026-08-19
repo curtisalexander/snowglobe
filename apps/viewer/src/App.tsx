@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import logo from "../../../assets/snowglobe-logo.webp";
 import {
+  getRequest,
   listRequests,
   openResultStream,
   type RequestSummary,
@@ -24,6 +25,8 @@ export function App() {
   const [workerState, setWorkerState] = useState<WorkerState>("starting");
   const [requests, setRequests] = useState<RequestSummary[] | null>(null);
   const [listFailed, setListFailed] = useState(false);
+  const [requestId, setRequestId] = useState("");
+  const [lookupFailed, setLookupFailed] = useState(false);
   const [loadingRequest, setLoadingRequest] = useState<string | null>(null);
   const [viewport, setViewport] = useState<Viewport | null>(null);
 
@@ -67,6 +70,20 @@ export function App() {
     }
   }
 
+  async function findRequest(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setLookupFailed(false);
+    try {
+      const item = await getRequest(requestId.trim());
+      setRequests((current) => [
+        item,
+        ...(current ?? []).filter((request) => request.requestId !== item.requestId),
+      ]);
+    } catch {
+      setLookupFailed(true);
+    }
+  }
+
   return (
     <main>
       <header>
@@ -96,19 +113,39 @@ export function App() {
       <section className="results" aria-labelledby="results-heading">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Authenticated Result API</p>
+            <p className="eyebrow">Local viewer backend</p>
             <h2 id="results-heading">Recent requests</h2>
           </div>
           {requests && <span>{requests.length} available</span>}
         </div>
 
+        <form className="request-lookup" onSubmit={(event) => void findRequest(event)}>
+          <label htmlFor="request-id">Open a request ID returned by MCP</label>
+          <div>
+            <input
+              id="request-id"
+              value={requestId}
+              onChange={(event) => setRequestId(event.target.value)}
+              pattern="[A-Za-z0-9_-]{20,32}"
+              required
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <button type="submit">Find request</button>
+          </div>
+        </form>
+        {lookupFailed && (
+          <p className="notice" role="alert">
+            That request is not available in this local Snowglobe session.
+          </p>
+        )}
         {listFailed && (
           <p className="notice" role="alert">
-            A valid viewer session is required to list results.
+            The local viewer backend is unavailable.
           </p>
         )}
         {requests?.length === 0 && (
-          <p className="notice">No requests are available for this viewer.</p>
+          <p className="notice">No requests are available in this local session.</p>
         )}
         {requests && requests.length > 0 && (
           <ul className="request-list">

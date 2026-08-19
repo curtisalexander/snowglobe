@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import timedelta
 
 import httpx2
 from mcp import Client, ClientSession
@@ -8,10 +9,11 @@ from mcp.types import TextContent
 from pytest import CaptureFixture, MonkeyPatch
 
 from snowglobe import mcp_gateway
+from snowglobe.broker import InProcessBroker
 from snowglobe.mcp_gateway import app, server
 
 
-def test_advertises_only_one_exact_tool_contract() -> None:
+def test_advertises_only_the_two_exact_tool_contracts() -> None:
     async def exercise() -> None:
         async with Client(server) as client:
             capabilities = client.server_capabilities.model_dump(
@@ -20,17 +22,32 @@ def test_advertises_only_one_exact_tool_contract() -> None:
             assert capabilities == {"tools": {"listChanged": False}}
 
             tools = await client.list_tools()
-            assert len(tools.tools) == 1
-            tool = tools.tools[0]
-            assert tool.name == "submit_read_query"
-            assert tool.input_schema["additionalProperties"] is False
-            assert tool.output_schema is not None
-            assert tool.output_schema["additionalProperties"] is False
-            assert set(tool.output_schema["properties"]) == {
+            assert [tool.name for tool in tools.tools] == [
+                "submit_read_query",
+                "get_query_status",
+            ]
+            submit, status = tools.tools
+            for tool in tools.tools:
+                assert tool.input_schema["additionalProperties"] is False
+                assert tool.output_schema is not None
+                assert tool.output_schema["additionalProperties"] is False
+            assert submit.output_schema is not None
+            assert status.output_schema is not None
+            assert set(submit.output_schema["properties"]) == {
                 "status",
                 "request_id",
                 "reason_code",
             }
+            assert set(status.output_schema["properties"]) == {"request_id", "status"}
+            assert status.output_schema["properties"]["status"]["enum"] == [
+                "pending",
+                "complete",
+                "failed",
+                "cancelled",
+                "expired",
+                "not_found",
+                "service_unavailable",
+            ]
 
     asyncio.run(exercise())
 
@@ -97,6 +114,53 @@ def test_invalid_arguments_return_only_fixed_reason() -> None:
     asyncio.run(exercise())
 
 
+def test_status_tool_reports_only_lifecycle_state(monkeypatch: MonkeyPatch) -> None:
+    request_broker = InProcessBroker()
+    item = request_broker.submit(requested_ttl=timedelta(minutes=5))
+    monkeypatch.setattr(mcp_gateway, "broker", request_broker)
+
+    async def exercise() -> None:
+        async with Client(server) as client:
+            pending = await client.call_tool(
+                "get_query_status",
+                {"request_id": item.request_id},
+            )
+
+            assert pending.structured_content == {
+                "request_id": item.request_id,
+                "status": "pending",
+            }
+            assert len(pending.content) == 1
+            assert isinstance(pending.content[0], TextContent)
+            assert json.loads(pending.content[0].text) == pending.structured_content
+
+            request_broker.fail(item.request_id)
+            failed = await client.call_tool(
+                "get_query_status",
+                {"request_id": item.request_id},
+            )
+            assert failed.structured_content == {
+                "request_id": item.request_id,
+                "status": "failed",
+            }
+
+    asyncio.run(exercise())
+
+
+def test_status_tool_does_not_reflect_invalid_ids() -> None:
+    canary = "INVALID.STATUS.ID.CANARY"
+
+    async def exercise() -> None:
+        async with Client(server) as client:
+            result = await client.call_tool("get_query_status", {"request_id": canary})
+
+            assert result.structured_content is not None
+            assert result.structured_content["status"] == "not_found"
+            assert canary not in result.model_dump_json()
+
+    asyncio.run(exercise())
+
+
 def test_unexpected_exception_is_sanitized(
     monkeypatch: MonkeyPatch,
     capsys: CaptureFixture[str],
@@ -154,7 +218,10 @@ def test_streamable_http_round_trip_preserves_the_contract() -> None:
                 }
 
                 tools = await session.list_tools()
-                assert [tool.name for tool in tools.tools] == ["submit_read_query"]
+                assert [tool.name for tool in tools.tools] == [
+                    "submit_read_query",
+                    "get_query_status",
+                ]
 
                 result = await session.call_tool(
                     "submit_read_query",
@@ -162,5 +229,12 @@ def test_streamable_http_round_trip_preserves_the_contract() -> None:
                 )
                 assert result.structured_content is not None
                 assert result.structured_content["reason_code"] == "SERVICE_UNAVAILABLE"
+
+                status = await session.call_tool(
+                    "get_query_status",
+                    {"request_id": result.structured_content["request_id"]},
+                )
+                assert status.structured_content is not None
+                assert status.structured_content["status"] == "not_found"
 
     asyncio.run(exercise())

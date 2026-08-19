@@ -16,6 +16,9 @@ dependencies = [
   "uvicorn>=0.35,<1",
 ]
 
+[project.scripts]
+snowglobe-local = "snowglobe.local_server:main"
+
 [project.optional-dependencies]
 snowflake = [
   "snowflake-connector-python>=4.7,<5",

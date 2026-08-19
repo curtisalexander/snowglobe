@@ -1,4 +1,9 @@
-export type RequestStatus = "complete" | "cancelled" | "expired";
+export type RequestStatus =
+  | "pending"
+  | "complete"
+  | "failed"
+  | "cancelled"
+  | "expired";
 
 export type RequestSummary = {
   requestId: string;
@@ -8,14 +13,13 @@ export type RequestSummary = {
 
 export class ResultApiError extends Error {
   constructor() {
-    super("Result API unavailable");
+    super("Local viewer backend unavailable");
     this.name = "ResultApiError";
   }
 }
 
 export async function listRequests(): Promise<RequestSummary[]> {
   const response = await fetch("/v1/requests", {
-    credentials: "include",
     cache: "no-store",
     headers: { Accept: "application/json" },
   });
@@ -28,13 +32,24 @@ export async function listRequests(): Promise<RequestSummary[]> {
   return body.requests.map(parseRequest);
 }
 
+export async function getRequest(requestId: string): Promise<RequestSummary> {
+  const response = await fetch(`/v1/requests/${encodeURIComponent(requestId)}`, {
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) throw new ResultApiError();
+  const body: unknown = await response.json().catch(() => {
+    throw new ResultApiError();
+  });
+  return parseRequest(body);
+}
+
 export async function openResultStream(
   requestId: string,
 ): Promise<ReadableStream<Uint8Array>> {
   const response = await fetch(
     `/v1/requests/${encodeURIComponent(requestId)}/stream`,
     {
-      credentials: "include",
       cache: "no-store",
       headers: { Accept: "application/vnd.snowglobe.arrow-stream" },
     },
@@ -74,5 +89,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isStatus(value: unknown): value is RequestStatus {
-  return value === "complete" || value === "cancelled" || value === "expired";
+  return (
+    value === "pending" ||
+    value === "complete" ||
+    value === "failed" ||
+    value === "cancelled" ||
+    value === "expired"
+  );
 }

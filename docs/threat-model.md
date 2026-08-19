@@ -1,119 +1,82 @@
-# Synthetic proof threat model
+# Single-analyst local threat model
 
-**Status:** Milestone 1 base product model with optional certified-deployment extension
+**Status:** Synthetic proof
 **Last updated:** August 19, 2026
 
-This document is the test design for the synthetic proof, not a production identity
-or storage architecture. Internal claim types, the test-only in-process broker,
-injected Result API authentication/authorization seams, synthetic Arrow admission,
-and a bounded viewer viewport are implemented. The fixed-URL viewer now calls the
-credential-bearing Result API list and stream routes, but MCP still rejects
-submissions, the default Result API authenticator denies all result access, and no
-real token authentication or Snowflake source is connected.
+## Scope and claim
 
-## Security claims
+One analyst runs Snowglobe and a coding agent on one machine. The analyst's configured
+Snowflake identity determines warehouse access. The coding agent supplies SQL through
+MCP; the analyst reviews completed results in the local viewer.
 
-### Base product claim
+The claim is narrow: Snowglobe's MCP output contains only the closed submission and
+lifecycle contracts in `PLAN.md`. Query-result bytes and rich metadata do not travel
+through MCP. The local viewer backend is a separate application path, but it is not
+protected from other processes running as the analyst.
 
-For the synthetic proof, result canaries may reach only the authenticated human's
-Result API response and ephemeral viewer worker through Snowglobe-owned interfaces.
-The agent receives the closed MCP receipt in `PLAN.md`; result status, metadata,
-schemas, values, errors, and data-plane locations do not cross MCP. Agent and service
-identities cannot authenticate to the Result API as viewers.
+## Components and allowed data
 
-This base proof does not claim protection from the authorized human, their browser or
-operating system, a malicious browser extension, an administrator, endpoint capture,
-or an agent host that can observe the separately rendered viewer.
-
-### Optional certified-deployment claim
-
-A deployment may additionally prove that canaries remain absent from actual model
-payloads and host-managed channels for a named agent host, browser, endpoint
-configuration, and version set. That evidence requires host-specific tests for
-screenshots, accessibility extraction, browser automation, previews, crash reports,
-prompt caches, and transcript persistence. It expires when a named component changes.
-
-## Identities and trust boundaries
-
-| Identity | Required synthetic claims | Permitted boundary |
+| Component | Data allowed | Main controls |
 |---|---|---|
-| Human viewer | non-empty subject; audience `snowglobe-viewer` | List, inspect, cancel, and stream only requests owned by that subject |
-| Agent session | non-empty agent subject; non-empty associated human subject; audience `snowglobe-mcp` | Submit a governed request for the associated human; receive only an MCP receipt |
-| Service | deployment-specific identity; never accepted as a viewer | Operate one plane according to deployment policy; no result access merely because it is a service |
-| Operator | deployment-specific administrative identity | Value-free operations by default; raw result diagnostics are outside the proof |
+| Coding agent and MCP client | Submitted SQL, purpose, TTL, opaque request ID, fixed reason, coarse lifecycle | Closed schemas, sanitized exceptions, no MCP resources/prompts/result reader |
+| Local Snowglobe runtime | Query input, policy decision, private execution handle, opaque ID, lifecycle, expiry | One loopback process, value-free logs, request-scoped cleanup |
+| Snowflake | Governed SQL and configured credentials | Explicit connector arguments, least-privileged role, AST policy, independent limits |
+| Local viewer backend | Request lifecycle and admitted Arrow result | Loopback binding, no-store/security headers, stream only complete requests |
+| Browser worker | Provisional Arrow and in-memory DuckDB-Wasm table | Failure-atomic publication, memory limits, termination on failure |
+| Browser main thread | Request list and bounded viewport/aggregate responses | Escaped rendering, no persistence/telemetry, bounded copies |
 
-Authentication adapters must verify claims before constructing these internal
-identities. HTTP headers, request IDs, and client-supplied JSON are not claims. The
-synthetic broker deliberately does not implement token verification; the production
-OIDC provider, token format, and deployment store remain Phase 0 inputs.
-
-The agent-to-human association is trusted only after control-plane authentication.
-The broker copies that verified human subject into an internal request record before
-an accepted receipt may be returned. The viewer authenticates independently. Its
-subject must match the stored owner on every list, open, cancel, and stream action.
+## Trust boundary
 
 ```text
-┌──────────────┐  MCP audience   ┌─────────────┐
-│ Agent host   │────────────────▶│ MCP gateway │
-└──────────────┘                 └──────┬──────┘
-                                       │ verified human association
-                                       ▼
-                                ┌─────────────┐
-                                │ Broker      │
-                                │ owner + TTL │
-                                └──────┬──────┘
-                                       │ ownership check on every action
-┌──────────────┐ viewer audience       ▼
-│ Human browser│────────────────▶┌─────────────┐
-└──────────────┘                 │ Result API  │
-                                 └──────┬──────┘
-                                        │ bounded Arrow + completion proof
-                                        ▼
-                                 ephemeral worker
+┌──────────────────── analyst's local security context ────────────────────┐
+│ coding agent ──MCP──▶ local runtime ──configured identity──▶ Snowflake   │
+│                         │                                                │
+│                         ├── process-local request broker                 │
+│                         │                                                │
+│ browser ◀──Arrow── local viewer backend                                 │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Data flows and threats
+The local operating-system user boundary is trusted. An attacker who can execute as
+the analyst, read the browser, or control the coding-agent host is outside the product
+boundary and may access viewer data. Loopback prevents ordinary remote clients from
+connecting; it does not distinguish the browser from another local process.
 
-| Component | Data allowed | Primary threats | Required controls for the proof |
-|---|---|---|---|
-| Model and agent host | SQL, purpose, requested TTL, closed receipt | Host captures tool input/output; agent tries the fixed viewer URL or observes the human viewer | No result-bearing MCP capability or URL; Result API rejects agent identity; certify host/endpoint capture paths only for the stronger claim |
-| MCP gateway | Query inputs, verified agent/human association, receipt | Exceptions, logs, timing, or schemas disclose result facts | Closed schemas; fixed errors; value-free logs; final exception mapping; no resources/prompts |
-| Snowflake | Not used in Milestone 1 | Credentials or database errors enter the agent environment | Keep disconnected for the synthetic proof |
-| Broker | Owner, opaque request ID, status, expiry, private source handle | ID becomes bearer token; cross-user confusion; stale access | Independent viewer auth; owner check on every operation; short TTL; generic denial |
-| Result API | Viewer identity and bounded Arrow stream | Wrong audience, copied ID, caching, partial publication, response/log leaks | Viewer-only audience; no-store/security headers; admission before publication; authenticated completion marker |
-| Browser main thread | Value-free request list; bounded viewport/aggregate responses | Full result copy, DOM injection, URL/storage/telemetry leaks | Escaped rendering; fixed routes; no persistence/telemetry; bounded responses |
-| Application worker | Provisional Arrow and in-memory DuckDB | Partial result becomes visible; state survives failure/logout/expiry | Hidden temporary table; atomic publish; terminate worker and database on every failure boundary |
-| Telemetry and process output | Fixed operational categories and opaque IDs only | Values, SQL, errors, schema, counts, or sizes escape | Allowlisted fields; captured stdout/stderr/logs/traces/metrics scanned for canaries |
-| Endpoint | Authorized rendered values | Screenshots, accessibility extraction, extensions, swap | Pin and test managed Chromium; document residual endpoint risk |
+## Primary threats and controls
+
+| Threat | Control |
+|---|---|
+| Result values or errors leak through MCP | Closed result schemas; lifecycle-only polling; final exception sanitization; canary scans |
+| Service is exposed to the network | Supported launcher and Vite bind to `127.0.0.1`; documentation forbids `0.0.0.0` |
+| SQL mutates data or escapes approved objects | One Snowflake `SELECT` AST; object/function allowlists; fixed role/warehouse; least privilege |
+| Expensive or oversized work exhausts resources | Statement/queue timeouts; concurrency cap; server row/column/cell/Arrow/memory limits |
+| Partial stream is mistaken for a complete result | Terminal framing marker; provisional DuckDB table; destroy state if completion is absent |
+| Data persists in browser or telemetry | No IndexedDB/OPFS/service-worker result cache; no third-party telemetry; `no-store` headers |
+| Opaque ID exposes a Snowflake identifier or query | Random URL-safe ID with no embedded identity, SQL, or Snowflake ID |
+| Separate backend processes lose request correlation | One supported runtime owns MCP, viewer routes, and process-local broker |
 
 ## Fail-closed rules
 
-- Unknown, unauthenticated, wrong-audience, wrong-owner, cancelled, and expired
-  access receives the same value-free denial at the public data boundary.
-- Possession of a request ID grants no access.
-- The in-process broker is test-only and is not a production durability or
-  multi-process design.
-- No MCP request becomes accepted until verified ownership, policy admission, and
-  synthetic source association complete atomically.
-- Arrow remains provisional in the worker until admission succeeds and an
-  authenticated completion marker is verified. Any truncation, overflow,
-  cancellation, expiry, or transport failure destroys provisional state.
-- The synthetic Result API uses the terminal frame defined in
-  [ADR 0005](decisions/0005-result-stream-framing.md). It omits that frame on any
-  stream failure; the worker integration must reject all such incomplete streams.
-- Arrow admission enforces explicitly configured row, column, scalar-cell, serialized,
-  and decoded-Arrow limits as defined in
-  [ADR 0006](decisions/0006-incremental-arrow-admission.md). Unsupported types and
-  schema changes fail closed without exposing the reason.
+- Submission remains rejected until SQL policy, configured execution, broker
+  registration, and asynchronous startup succeed as one path.
+- Status polling emits only the request ID and allowlisted lifecycle state.
+- Unknown IDs and internal failures reveal no query, source, error, or result detail.
+- Only complete, unexpired requests have a stream source.
+- Arrow stays provisional until all limits pass and terminal completion arrives.
+- Cancellation, expiry, source failure, overflow, or truncation omits completion and
+  destroys provisional browser state.
+- The runtime never falls back from incremental Arrow retrieval to `fetchall()` or full
+  row dictionaries.
 
 ## Required evidence
 
-The base boundary harness must prove authorized visibility and canary absence across
-Snowglobe MCP traffic, stdout/stderr, application logs, traces, metrics, URLs, errors,
-and browser storage. Authorization tests must cover absent authentication, wrong
-audience, wrong user, copied request ID, agent and service identities, revocation,
-cancellation, and expiry.
-
-A certified-deployment harness must additionally capture exact model payloads, host
-history, previews, screenshots, accessibility extraction, browser automation, crash
-reports, prompt caches, and transcript persistence for every named version.
+- exact two-tool MCP capability and schema tests;
+- text/structured parity and malformed/unknown-call tests;
+- pending through terminal lifecycle tests with no result-derived fields;
+- canaries in cells, column names, SQL, and internal exceptions absent from MCP and
+  process output;
+- viewer list/lookup behavior and complete-only stream access;
+- cancellation, expiry, source failure, and final-batch overflow tests;
+- local launcher and development server loopback configuration;
+- no browser result storage, external readers, or unbounded main-thread copy; and
+- a real MCP Streamable HTTP round trip.

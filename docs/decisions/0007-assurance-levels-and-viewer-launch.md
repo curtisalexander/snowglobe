@@ -1,6 +1,6 @@
 # ADR 0007: Separate the product boundary from endpoint certification
 
-- **Status:** Accepted
+- **Status:** Superseded in part by [ADR 0008](0008-single-analyst-loopback-runtime.md)
 - **Date:** August 19, 2026
 
 ## Context

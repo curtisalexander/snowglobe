@@ -1,4 +1,4 @@
-"""Strict, operator-owned Snowflake connection configuration."""
+"""Strict, analyst-owned Snowflake connection configuration."""
 
 import tomllib
 from dataclasses import dataclass

@@ -1,6 +1,6 @@
 # ADR 0004: Synthetic identities and in-process broker
 
-- **Status:** Accepted for the synthetic proof
+- **Status:** Superseded by [ADR 0008](0008-single-analyst-loopback-runtime.md)
 - **Date:** August 18, 2026
 
 ## Context

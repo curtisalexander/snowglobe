@@ -6,13 +6,9 @@ import pyarrow as pa
 import pytest
 
 from snowglobe.broker import (
-    AGENT_AUDIENCE,
-    VIEWER_AUDIENCE,
-    AgentClaims,
     InProcessBroker,
-    RequestAccessDenied,
     RequestStatus,
-    ViewerClaims,
+    RequestUnavailable,
 )
 
 
@@ -32,74 +28,66 @@ class Source:
             yield pa.record_batch([], schema=self.schema)
 
 
-def agent(owner: str = "human-a", audience: str = AGENT_AUDIENCE) -> AgentClaims:
-    return AgentClaims(subject="agent-session", human_subject=owner, audience=audience)
-
-
-def viewer(subject: str = "human-a", audience: str = VIEWER_AUDIENCE) -> ViewerClaims:
-    return ViewerClaims(subject=subject, audience=audience)
-
-
-def test_submission_is_associated_with_owner_status_expiry_and_source() -> None:
+def test_pending_submission_can_be_published_atomically() -> None:
     clock = Clock(datetime(2026, 8, 18, tzinfo=UTC))
     broker = InProcessBroker(maximum_ttl=timedelta(minutes=15), clock=clock)
-    source = Source()
 
-    request = broker.submit(agent(), requested_ttl=timedelta(hours=1), source=source)
+    request = broker.submit(requested_ttl=timedelta(hours=1))
 
-    assert request.status is RequestStatus.COMPLETE
+    assert request.status is RequestStatus.PENDING
     assert request.expires_at == clock.now + timedelta(minutes=15)
     assert 20 <= len(request.request_id) <= 32
-    assert broker.list_requests(viewer()) == (request,)
-    assert broker.open_source(viewer(), request.request_id) is source
+    assert broker.list_requests() == (request,)
+    with pytest.raises(RequestUnavailable, match=r"^$"):
+        broker.open_source(request.request_id)
+
+    source = Source()
+    published = broker.publish(request.request_id, source)
+
+    assert published.status is RequestStatus.COMPLETE
+    assert broker.open_source(request.request_id) is source
 
 
-def test_request_id_is_not_authorization() -> None:
+def test_completed_synthetic_source_can_be_registered_in_one_step() -> None:
     broker = InProcessBroker()
-    request = broker.submit(agent(), requested_ttl=timedelta(minutes=5), source=Source())
+    source = Source()
 
-    assert broker.list_requests(viewer("human-b")) == ()
-    with pytest.raises(RequestAccessDenied, match=r"^$"):
-        broker.get_request(viewer("human-b"), request.request_id)
-    with pytest.raises(RequestAccessDenied, match=r"^$"):
-        broker.open_source(viewer("human-b"), request.request_id)
-    with pytest.raises(RequestAccessDenied, match=r"^$"):
-        broker.cancel(viewer("human-b"), request.request_id)
+    request = broker.submit(requested_ttl=timedelta(minutes=5), source=source)
+
+    assert request.status is RequestStatus.COMPLETE
+    assert broker.open_source(request.request_id) is source
 
 
-def test_control_and_data_plane_audiences_are_not_interchangeable() -> None:
+def test_requests_are_listed_most_recent_first() -> None:
     broker = InProcessBroker()
+    first = broker.submit(requested_ttl=timedelta(minutes=5))
+    second = broker.submit(requested_ttl=timedelta(minutes=5))
 
-    with pytest.raises(RequestAccessDenied, match=r"^$"):
-        broker.submit(
-            agent(audience=VIEWER_AUDIENCE),
-            requested_ttl=timedelta(minutes=5),
-            source=Source(),
-        )
-    with pytest.raises(RequestAccessDenied, match=r"^$"):
-        broker.list_requests(viewer(audience=AGENT_AUDIENCE))
+    assert broker.list_requests() == (second, first)
 
 
-def test_cancelled_and_expired_requests_cannot_be_opened() -> None:
+def test_failed_cancelled_and_expired_requests_have_no_result_source() -> None:
     clock = Clock(datetime(2026, 8, 18, tzinfo=UTC))
     broker = InProcessBroker(clock=clock)
-    cancelled = broker.submit(agent(), requested_ttl=timedelta(minutes=5), source=Source())
-    expired = broker.submit(agent(), requested_ttl=timedelta(minutes=1), source=Source())
+    failed = broker.submit(requested_ttl=timedelta(minutes=5))
+    cancelled = broker.submit(requested_ttl=timedelta(minutes=5), source=Source())
+    expired = broker.submit(requested_ttl=timedelta(minutes=1), source=Source())
 
-    assert broker.cancel(viewer(), cancelled.request_id).status is RequestStatus.CANCELLED
+    assert broker.fail(failed.request_id).status is RequestStatus.FAILED
+    assert broker.cancel(cancelled.request_id).status is RequestStatus.CANCELLED
     clock.now += timedelta(minutes=2)
-    assert broker.get_request(viewer(), expired.request_id).status is RequestStatus.EXPIRED
+    assert broker.get_request(expired.request_id).status is RequestStatus.EXPIRED
 
-    for request_id in (cancelled.request_id, expired.request_id):
-        with pytest.raises(RequestAccessDenied, match=r"^$"):
-            broker.open_source(viewer(), request_id)
+    for request_id in (failed.request_id, cancelled.request_id, expired.request_id):
+        with pytest.raises(RequestUnavailable, match=r"^$"):
+            broker.open_source(request_id)
 
 
 def test_unknown_request_failure_does_not_reflect_identifier() -> None:
     broker = InProcessBroker()
     canary = "REQUEST_ID_CANARY"
 
-    with pytest.raises(RequestAccessDenied, match=r"^$") as failure:
-        broker.get_request(viewer(), canary)
+    with pytest.raises(RequestUnavailable, match=r"^$") as failure:
+        broker.get_request(canary)
 
     assert canary not in str(failure.value)

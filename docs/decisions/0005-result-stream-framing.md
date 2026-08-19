@@ -1,6 +1,6 @@
 # ADR 0005: Failure-atomic synthetic result stream framing
 
-- **Status:** Accepted for the synthetic proof
+- **Status:** Superseded in part by [ADR 0008](0008-single-analyst-loopback-runtime.md); framing remains accepted
 - **Date:** August 18, 2026
 
 ## Context

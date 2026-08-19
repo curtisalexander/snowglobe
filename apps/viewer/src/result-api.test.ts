@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  getRequest,
   listRequests,
   openResultStream,
   ResultApiError,
@@ -9,7 +10,7 @@ import {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Result API client", () => {
-  it("lists only schema-valid request metadata with viewer credentials", async () => {
+  it("lists only schema-valid local request metadata", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -34,10 +35,35 @@ describe("Result API client", () => {
       },
     ]);
     expect(fetchMock).toHaveBeenCalledWith("/v1/requests", {
-      credentials: "include",
       cache: "no-store",
       headers: { Accept: "application/json" },
     });
+  });
+
+  it("opens one request by its opaque id", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          request_id: "abcdefghijklmnopqrstuvwx",
+          status: "pending",
+          expires_at: "2026-08-19T12:00:00+00:00",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getRequest("abcdefghijklmnopqrstuvwx")).resolves.toMatchObject({
+      requestId: "abcdefghijklmnopqrstuvwx",
+      status: "pending",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/v1/requests/abcdefghijklmnopqrstuvwx",
+      {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      },
+    );
   });
 
   it.each([
@@ -66,7 +92,7 @@ describe("Result API client", () => {
     await expect(listRequests()).rejects.toThrow(ResultApiError);
   });
 
-  it("opens an authenticated no-store Arrow stream", async () => {
+  it("opens a no-store Arrow stream", async () => {
     const stream = new ReadableStream<Uint8Array>();
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(stream, {
@@ -82,7 +108,6 @@ describe("Result API client", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/v1/requests/abcdefghijklmnopqrstuvwx/stream",
       {
-        credentials: "include",
         cache: "no-store",
         headers: { Accept: "application/vnd.snowglobe.arrow-stream" },
       },

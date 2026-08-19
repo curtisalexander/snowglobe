@@ -20,7 +20,7 @@ defaults.
   `RecordBatch` objects. Schema changes and non-record-batch values are rejected.
 - Require explicit positive limits for rows, columns, maximum cell bytes, serialized
   Arrow bytes, and cumulative decoded Arrow bytes. The deployable deny-all app has no
-  implicit result limits; an authenticated stream without configured limits returns
+  implicit result limits; a local stream without configured limits returns
   a fixed service-unavailable response.
 - Validate column count and supported types before opening the IPC stream. The
   synthetic proof initially accepts null, Boolean, integer, floating-point, decimal,
