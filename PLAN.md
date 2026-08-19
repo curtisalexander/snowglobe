@@ -177,7 +177,7 @@ JavaScript row store.
 
 #### Connection and execution
 
-- [ ] Build Snowflake connector arguments from the explicit configuration allowlist.
+- [x] Build Snowflake connector arguments from the explicit configuration allowlist.
 - [ ] Add reviewed statement, queue, login, network, and detached-query settings.
 - [ ] Start execution asynchronously and register request/cursor before returning accepted.
 - [ ] Keep Snowflake query IDs, credentials, tokens, and driver errors private.
@@ -251,15 +251,15 @@ The initial product is done when evidence supports this statement:
 
 ## 9. Immediate next item
 
-The architecture migration is complete when its checks pass. The next implementation
-item is the **governed asynchronous Snowflake executor seam**:
+The architecture migration and explicit connector-argument builder are complete. The
+next implementation item is the remaining **governed asynchronous Snowflake executor
+seam**:
 
-1. define and test explicit connector arguments from `connections.toml`;
-2. own one connection/cursor lifecycle per request;
-3. submit work in the background and atomically publish a pending broker record before
+1. own one connection/cursor lifecycle per request;
+2. submit work in the background and atomically publish a pending broker record before
    returning `accepted`;
-4. transition only to closed lifecycle states through MCP; and
-5. expose incremental Arrow only to the local viewer after admission.
+3. transition only to closed lifecycle states through MCP; and
+4. expose incremental Arrow only to the local viewer after admission.
 
 Do not connect acceptance to real Snowflake until SQL AST policy and execution limits
 are enforced in the same path.

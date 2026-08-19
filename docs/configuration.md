@@ -31,13 +31,22 @@ role = "SNOWGLOBE_READER"
 
 The current loader rejects missing or unknown fields and selects a named profile supplied by local startup code, not tool input. Database, warehouse, role, authenticator, key path, and profile name are therefore analyst configuration—not agent-controlled query parameters.
 
-The current private-key loader:
+The connector-argument builder copies only the seven allowlisted driver parameters
+shown below; it does not forward the TOML document or the key path:
+
+`account`, `user`, `authenticator`, `private_key`, `database`, `warehouse`, and `role`.
+
+While building those arguments, the private-key loader:
 
 1. reads the expanded server-local path from the validated profile;
 2. reads PEM or DER key material;
 3. deserializes it with `cryptography`;
 4. converts it in memory to unencrypted PKCS#8 DER expected by `snowflake.connector.connect`; and
 5. avoids logging, tracing, serializing, or returning the path or key bytes.
+
+Timeouts, session parameters, and other server-owned execution controls will be added
+only after they are reviewed against the pinned driver. They are not accepted from
+`connections.toml` or MCP input.
 
 Config/key ownership and permission enforcement remains a Milestone 0 task because local files and container secret mounts require different policies. The present loader verifies readability but does not yet enforce a permission mode.
 

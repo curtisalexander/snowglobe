@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from snowglobe.private_key import load_private_key
+
 SCHEMA_VERSION = 1
 ROOT_FIELDS = frozenset({"schema_version", "connections"})
 PROFILE_FIELDS = frozenset(
@@ -25,6 +27,20 @@ class SnowflakeProfile:
     database: str
     warehouse: str
     role: str
+
+
+def build_connector_arguments(profile: SnowflakeProfile) -> dict[str, object]:
+    """Build the exact server-owned arguments accepted by the Snowflake connector."""
+
+    return {
+        "account": profile.account,
+        "user": profile.user,
+        "authenticator": profile.authenticator,
+        "private_key": load_private_key(profile.private_key_path),
+        "database": profile.database,
+        "warehouse": profile.warehouse,
+        "role": profile.role,
+    }
 
 
 def load_profile(path: Path, profile_name: str) -> SnowflakeProfile:
