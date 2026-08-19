@@ -26,8 +26,8 @@ browser worker.
                                   │                        │
                                   │ process-local broker   │ Arrow batches
                                   ▼                        │
-                       ┌──────────────────────┐             │
-                       │ Viewer HTTP routes   │◀────────────┘
+                       ┌──────────────────────┐            │
+                       │ Viewer HTTP routes   │◀───────────┘
                        └──────────┬───────────┘
                                   │ framed Arrow stream
                                   ▼
