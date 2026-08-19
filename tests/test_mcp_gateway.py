@@ -139,8 +139,9 @@ def test_synthetic_submission_returns_accepted_only_after_pending_startup(
         assert canary in sql
         assert purpose == canary
 
-        async def work(request_id: str) -> Source:
+        async def work(request_id: str, mark_started) -> Source:
             assert request_broker.get_request(request_id).status.value == "pending"
+            mark_started(None)
             started.set()
             await release.wait()
             return source
@@ -209,7 +210,8 @@ def test_background_execution_failure_exposes_only_failed_without_process_output
         assert sql_canary in sql
         assert purpose == purpose_canary
 
-        async def work(_request_id: str) -> Source:
+        async def work(_request_id: str, mark_started) -> Source:
+            mark_started(None)
             finished.set()
             raise RuntimeError(error_canary)
 

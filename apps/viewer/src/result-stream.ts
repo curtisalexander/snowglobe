@@ -14,16 +14,17 @@ export class ResultStreamError extends Error {
 }
 
 export class ResultStreamParser {
-  readonly #maximumFrameBytes: bigint;
+  readonly #maximumResultBytes: bigint;
   #buffer: Uint8Array = new Uint8Array();
   #magicRead = false;
   #complete = false;
+  #arrowBytes = 0n;
 
-  constructor(maximumFrameBytes: number) {
-    if (!Number.isSafeInteger(maximumFrameBytes) || maximumFrameBytes <= 0) {
+  constructor(maximumResultBytes: number) {
+    if (!Number.isSafeInteger(maximumResultBytes) || maximumResultBytes <= 0) {
       throw new ResultStreamError();
     }
-    this.#maximumFrameBytes = BigInt(maximumFrameBytes);
+    this.#maximumResultBytes = BigInt(maximumResultBytes);
   }
 
   push(chunk: Uint8Array): Uint8Array[] {
@@ -59,7 +60,7 @@ export class ResultStreamParser {
       if (
         frameType !== ARROW_FRAME ||
         payloadLength === 0n ||
-        payloadLength > this.#maximumFrameBytes
+        payloadLength > this.#maximumResultBytes
       ) {
         throw new ResultStreamError();
       }
@@ -68,6 +69,8 @@ export class ResultStreamParser {
       }
 
       const payloadBytes = Number(payloadLength);
+      this.#arrowBytes += payloadLength;
+      if (this.#arrowBytes > this.#maximumResultBytes) throw new ResultStreamError();
       arrowChunks.push(
         this.#buffer.slice(FRAME_HEADER_BYTES, FRAME_HEADER_BYTES + payloadBytes),
       );
@@ -93,8 +96,8 @@ export class ProvisionalResult {
   readonly #parser: ResultStreamParser;
   readonly #sink: ProvisionalArrowSink;
 
-  constructor(maximumFrameBytes: number, sink: ProvisionalArrowSink) {
-    this.#parser = new ResultStreamParser(maximumFrameBytes);
+  constructor(maximumResultBytes: number, sink: ProvisionalArrowSink) {
+    this.#parser = new ResultStreamParser(maximumResultBytes);
     this.#sink = sink;
   }
 

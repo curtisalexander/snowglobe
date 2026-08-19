@@ -4,9 +4,10 @@ export type WorkerState = "starting" | "ready" | "failed";
 
 type WorkerReply = { type: string; sequence?: number; viewport?: Viewport };
 type PendingReply = { resolve(value: unknown): void; reject(): void };
+type WorkerHandle = Pick<Worker, "onmessage" | "onerror" | "postMessage" | "terminate">;
 
 export type DatabaseWorker = {
-  load(stream: ReadableStream<Uint8Array>, maximumFrameBytes: number): Promise<void>;
+  load(stream: ReadableStream<Uint8Array>, maximumResultBytes: number): Promise<void>;
   viewport(offset: number, limit: number): Promise<Viewport>;
   destroy(): void;
 };
@@ -19,11 +20,14 @@ export function stateFromMessage(type: string): WorkerState {
 
 export function startDatabaseWorker(
   onState: (state: WorkerState) => void,
+  createWorker: () => WorkerHandle = () =>
+    new Worker(new URL("./duckdb.worker.ts", import.meta.url), {
+      type: "module",
+    }),
 ): DatabaseWorker {
-  const worker = new Worker(new URL("./duckdb.worker.ts", import.meta.url), {
-    type: "module",
-  });
+  const worker = createWorker();
   let failed = false;
+  let loadStarted = false;
   let sequence = 0;
   let markReady: () => void;
   const ready = new Promise<void>((resolve) => {
@@ -80,11 +84,20 @@ export function startDatabaseWorker(
   };
 
   return {
-    async load(stream, maximumFrameBytes) {
+    async load(stream, maximumResultBytes) {
+      if (loadStarted) {
+        if (!failed) worker.postMessage({ type: "abort" });
+        failed = true;
+        markReady();
+        for (const reply of replies.values()) reply.reject();
+        replies.clear();
+        throw new Error("Database worker unavailable");
+      }
+      loadStarted = true;
       await ready;
       const reader = stream.getReader();
       try {
-        await send<void>({ type: "stream-start", maximumFrameBytes });
+        await send<void>({ type: "stream-start", maximumResultBytes });
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;

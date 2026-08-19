@@ -146,6 +146,30 @@ def test_cursor_created_after_cancellation_is_immediately_cancelled() -> None:
     assert cursor.cancel_count == 1
 
 
+def test_only_the_exact_registered_cursor_can_be_released() -> None:
+    broker = InProcessBroker()
+    request = broker.submit(requested_ttl=timedelta(minutes=5))
+    cursor = Cursor()
+    broker.register_cursor(request.request_id, cursor)
+
+    broker.release_cursor(request.request_id, Cursor())
+    broker.cancel(request.request_id)
+
+    assert cursor.cancel_count == 1
+
+
+def test_released_cursor_is_not_cancelled_after_execution_finishes() -> None:
+    broker = InProcessBroker()
+    request = broker.submit(requested_ttl=timedelta(minutes=5))
+    cursor = Cursor()
+    broker.register_cursor(request.request_id, cursor)
+
+    broker.release_cursor(request.request_id, cursor)
+    broker.fail(request.request_id)
+
+    assert cursor.cancel_count == 0
+
+
 def test_cursor_cancellation_failure_is_private_and_remains_idempotent() -> None:
     broker = InProcessBroker()
     request = broker.submit(requested_ttl=timedelta(minutes=5))
@@ -154,6 +178,31 @@ def test_cursor_cancellation_failure_is_private_and_remains_idempotent() -> None
 
     assert broker.cancel(request.request_id).status is RequestStatus.CANCELLED
     assert broker.cancel(request.request_id).status is RequestStatus.CANCELLED
+    assert cursor.cancel_count == 1
+
+
+def test_failure_cancels_and_removes_the_private_cursor() -> None:
+    broker = InProcessBroker()
+    request = broker.submit(requested_ttl=timedelta(minutes=5))
+    cursor = Cursor()
+    broker.register_cursor(request.request_id, cursor)
+
+    assert broker.fail(request.request_id).status is RequestStatus.FAILED
+    assert cursor.cancel_count == 1
+    with pytest.raises(RequestUnavailable, match=r"^$"):
+        broker.register_cursor(request.request_id, Cursor())
+
+
+def test_expiry_cancels_and_removes_the_private_cursor() -> None:
+    clock = Clock(datetime(2026, 8, 18, tzinfo=UTC))
+    broker = InProcessBroker(clock=clock)
+    request = broker.submit(requested_ttl=timedelta(minutes=1))
+    cursor = Cursor()
+    broker.register_cursor(request.request_id, cursor)
+
+    clock.now += timedelta(minutes=1)
+
+    assert broker.get_request(request.request_id).status is RequestStatus.EXPIRED
     assert cursor.cancel_count == 1
 
 

@@ -121,6 +121,14 @@ class InProcessBroker:
             self._cancel_quietly(cursor)
         raise RequestUnavailable
 
+    def release_cursor(self, request_id: str, cursor: CancellableCursor) -> None:
+        """Remove a request's exact cursor after connector cleanup starts."""
+
+        with self._lock:
+            record = self._record(request_id)
+            if record.status is RequestStatus.PENDING and record.cursor is cursor:
+                record.cursor = None
+
     def publish(self, request_id: str, source: ArrowBatchSource) -> RequestView:
         """Atomically attach a result source and mark pending work complete."""
 
@@ -134,13 +142,19 @@ class InProcessBroker:
             return record.view()
 
     def fail(self, request_id: str) -> RequestView:
+        cursor: CancellableCursor | None
         with self._lock:
             record = self._record(request_id)
             if record.status is not RequestStatus.PENDING:
                 raise RequestUnavailable
+            cursor = record.cursor
             record.cursor = None
             record.status = RequestStatus.FAILED
-            return record.view()
+            view = record.view()
+
+        if cursor is not None:
+            self._cancel_quietly(cursor)
+        return view
 
     def list_requests(self) -> tuple[RequestView, ...]:
         with self._lock:
@@ -192,9 +206,12 @@ class InProcessBroker:
             }
             and self._now() >= record.expires_at
         ):
+            cursor = record.cursor
             record.status = RequestStatus.EXPIRED
             record.source = None
             record.cursor = None
+            if cursor is not None:
+                self._cancel_quietly(cursor)
         return record
 
     def _new_request_id(self) -> str:

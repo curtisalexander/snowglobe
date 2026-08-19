@@ -28,8 +28,9 @@ def test_admits_before_registering_pending_work_and_completes_in_background() ->
         def admit(sql: str, purpose: str):
             assert (sql, purpose) == ("select 1", "synthetic proof")
 
-            async def work(request_id: str) -> Source:
+            async def work(request_id: str, mark_started) -> Source:
                 assert broker.get_request(request_id).status is RequestStatus.PENDING
+                mark_started(None)
                 started.set()
                 await release.wait()
                 return source
@@ -37,7 +38,7 @@ def test_admits_before_registering_pending_work_and_completes_in_background() ->
             return work
 
         executor = BackgroundQueryExecutor(broker=broker, admit=admit)
-        request = executor.submit(
+        request = await executor.submit(
             sql="select 1",
             purpose="synthetic proof",
             requested_ttl=timedelta(minutes=5),
@@ -56,21 +57,24 @@ def test_admits_before_registering_pending_work_and_completes_in_background() ->
 
 
 def test_policy_rejection_creates_no_request() -> None:
-    broker = InProcessBroker()
+    async def exercise() -> None:
+        broker = InProcessBroker()
 
-    def reject(_sql: str, _purpose: str):
-        raise QueryPolicyRejected
+        def reject(_sql: str, _purpose: str):
+            raise QueryPolicyRejected
 
-    executor = BackgroundQueryExecutor(broker=broker, admit=reject)
+        executor = BackgroundQueryExecutor(broker=broker, admit=reject)
 
-    with pytest.raises(QueryPolicyRejected, match=r"^$"):
-        executor.submit(
-            sql="select 1",
-            purpose="rejected",
-            requested_ttl=timedelta(minutes=5),
-        )
+        with pytest.raises(QueryPolicyRejected, match=r"^$"):
+            await executor.submit(
+                sql="select 1",
+                purpose="rejected",
+                requested_ttl=timedelta(minutes=5),
+            )
 
-    assert broker.list_requests() == ()
+        assert broker.list_requests() == ()
+
+    asyncio.run(exercise())
 
 
 def test_background_failure_becomes_detail_free_failed_state(
@@ -82,13 +86,14 @@ def test_background_failure_becomes_detail_free_failed_state(
         broker = InProcessBroker()
 
         def admit(_sql: str, _purpose: str):
-            async def work(_request_id: str) -> Source:
+            async def work(_request_id: str, mark_started) -> Source:
+                mark_started(None)
                 raise RuntimeError(canary)
 
             return work
 
         executor = BackgroundQueryExecutor(broker=broker, admit=admit)
-        request = executor.submit(
+        request = await executor.submit(
             sql="select 1",
             purpose="failure proof",
             requested_ttl=timedelta(minutes=5),

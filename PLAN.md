@@ -1,8 +1,8 @@
 # Snowglobe implementation plan
 
-**Status:** MVP connection/resource safety and minimum SQL policy are complete; the real Snowflake executor does not exist yet
+**Status:** Gates 1–4 are complete; the constrained connected MVP procedure is next
 **Last updated:** August 19, 2026
-**Current decision:** [ADR 0010](docs/decisions/0010-minimum-snowflake-select-policy.md)
+**Current decision:** [ADR 0011](docs/decisions/0011-bounded-snowflake-execution.md)
 **Retained source proposal:** [architecture-proposal.md](docs/architecture-proposal.md)
 
 ## 1. Outcome
@@ -202,23 +202,23 @@ Snowflake role is an independent backstop, not a replacement for this policy.
 
 ### Gate 3 — real asynchronous Snowflake executor
 
-- [ ] Connect configured work to the existing background-executor seam and establish
+- [x] Connect configured work to the existing background-executor seam and establish
   pending registration plus request-scoped cursor ownership before returning
   `accepted`.
-- [ ] Execute the policy-approved, server-capped SQL with the reviewed timeout and
+- [x] Execute the policy-approved, server-capped SQL with the reviewed timeout and
   session settings from Gate 1.
-- [ ] Adapt `fetch_arrow_batches()` to the existing `ArrowBatchSource` contract and
+- [x] Adapt `fetch_arrow_batches()` to the existing `ArrowBatchSource` contract and
   retrieve incrementally with backpressure.
-- [ ] Preserve Arrow names/types and define the admitted empty-result schema and
+- [x] Preserve Arrow names/types and define the admitted empty-result schema and
   completion behavior.
-- [ ] Enforce all compute and result limits before browser publication; reject
+- [x] Enforce all compute and result limits before browser publication; reject
   oversized results without silent truncation or local spill.
-- [ ] Never concatenate complete results, call `to_pylist()`, build full row
+- [x] Never concatenate complete results, call `to_pylist()`, build full row
   dictionaries, use `fetchall()`, or write result bytes to an agent-visible file.
-- [ ] Map execution, driver, cancellation, timeout, overflow, and cleanup failures to
+- [x] Map execution, driver, cancellation, timeout, overflow, and cleanup failures to
   value-free lifecycle states; never expose Snowflake IDs, SQL, credentials, tokens,
   or driver errors through MCP or ordinary logs.
-- [ ] Close the cursor and connection and remove private broker associations on every
+- [x] Close the cursor and connection and remove private broker associations on every
   terminal path; make cancellation and expiry race-safe.
 
 Why this gate cannot be deferred: this is the missing production-shaped seam. A
@@ -227,15 +227,15 @@ retain credentials or handles, publish incomplete data, or bypass admission limi
 
 ### Gate 4 — minimum browser and boundary assurance
 
-- [ ] Destroy application-worker and DuckDB state on every stream error, overflow,
+- [x] Destroy application-worker and DuckDB state on every stream error, overflow,
   cancellation, expiry, request change, and viewer close path.
-- [ ] Complete no-IndexedDB, no-OPFS, no-service-worker-cache, no automatic-restore,
+- [x] Complete no-IndexedDB, no-OPFS, no-service-worker-cache, no automatic-restore,
   and no-external-reader tests.
-- [ ] Seed non-sensitive canaries in values, column names, SQL, internal errors,
+- [x] Seed non-sensitive canaries in values, column names, SQL, internal errors,
   Unicode, binary, empty results, multiple batches, and oversized cells/results.
-- [ ] Capture MCP traffic, stdout/stderr, ordinary logs, URLs, public errors, and
+- [x] Capture MCP traffic, stdout/stderr, ordinary logs, URLs, public errors, and
   browser storage; assert canaries appear only in the local viewer data path.
-- [ ] Verify every pending and terminal MCP response contains only the closed receipt,
+- [x] Verify every pending and terminal MCP response contains only the closed receipt,
   with no rows, schema, counts, sizes, timing, Snowflake identifiers, or errors.
 - [x] Verify the supported launcher and Vite server are loopback-only.
 
@@ -363,7 +363,7 @@ virtualization, export, or polished packaging.
 
 ## 12. Immediate next items
 
-Gates 1 and 2 are complete. Implement Gate 3's real asynchronous Snowflake executor
-next, connecting `fetch_arrow_batches()` to the existing executor and Arrow admission
-seams with terminal cleanup. Do not configure real credentials or connect acceptance
-to Snowflake before the applicable gates above are complete.
+Gates 1–4 are complete. Document Gate 5's exact constrained-environment setup,
+operation, cancellation, expiry, restart, and evidence procedure next, then update
+`SECURITY.md` to permit only that procedure. Do not configure real credentials or
+attempt a Snowflake connection before those documentation steps are complete.

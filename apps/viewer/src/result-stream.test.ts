@@ -67,6 +67,21 @@ describe("result stream parser", () => {
     expect(() => parser.push(concatenate(magic, header))).toThrow(ResultStreamError);
   });
 
+  it("rejects cumulative Arrow payload beyond the browser result-input ceiling", () => {
+    const parser = new ResultStreamParser(5);
+
+    expect(() =>
+      parser.push(
+        concatenate(
+          magic,
+          frame(1, new Uint8Array([1, 2, 3])),
+          frame(1, new Uint8Array([4, 5, 6])),
+          frame(2),
+        ),
+      ),
+    ).toThrow(ResultStreamError);
+  });
+
   it.each([
     ["missing completion", concatenate(magic, frame(1, new Uint8Array([1])))],
     ["truncated header", concatenate(magic, frame(1, new Uint8Array([1])), new Uint8Array([2]))],

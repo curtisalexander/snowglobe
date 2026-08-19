@@ -1,7 +1,7 @@
 """Incremental Arrow admission and IPC serialization for the human data path."""
 
 import struct
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -19,6 +19,18 @@ class ArrowBatchSource(Protocol):
     def schema(self) -> pa.Schema: ...
 
     def open(self) -> AsyncIterator[pa.RecordBatch]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class InMemoryArrowBatchSource:
+    """A complete admitted result retained as bounded record batches."""
+
+    schema: pa.Schema
+    batches: tuple[pa.RecordBatch, ...]
+
+    async def open(self) -> AsyncIterator[pa.RecordBatch]:
+        for batch in self.batches:
+            yield batch
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,53 +84,102 @@ class _ChunkSink:
         return chunk
 
 
+class _AdmissionState:
+    """Incremental validation and serialization shared by execution and streaming."""
+
+    def __init__(self, schema: pa.Schema, limits: ArrowAdmissionLimits) -> None:
+        _validate_schema(schema, limits)
+        self._schema = schema
+        self._limits = limits
+        self._sink = _ChunkSink()
+        self._writer = pa.ipc.new_stream(self._sink, schema)
+        self._rows = 0
+        self._decoded_bytes = 0
+        self._arrow_bytes = 0
+        self._closed = False
+
+    def admit(self, batch: pa.RecordBatch) -> bytes:
+        if self._closed or not isinstance(batch, pa.RecordBatch):
+            raise ArrowAdmissionError
+        if not batch.schema.equals(self._schema, check_metadata=True):
+            raise ArrowAdmissionError
+
+        self._rows += batch.num_rows
+        self._decoded_bytes += batch.nbytes
+        if (
+            self._rows > self._limits.maximum_rows
+            or self._decoded_bytes > self._limits.maximum_decoded_bytes
+        ):
+            raise ArrowAdmissionError
+        if _maximum_cell_bytes(batch) > self._limits.maximum_cell_bytes:
+            raise ArrowAdmissionError
+
+        self._writer.write_batch(batch)
+        return self._drain_within_limit()
+
+    def finish(self) -> bytes:
+        if self._closed:
+            raise ArrowAdmissionError
+        self._writer.close()
+        self._closed = True
+        return self._drain_within_limit()
+
+    def close(self) -> None:
+        if not self._closed:
+            self._closed = True
+            self._writer.close()
+
+    def _drain_within_limit(self) -> bytes:
+        chunk = self._sink.drain()
+        self._arrow_bytes += len(chunk)
+        if self._arrow_bytes > self._limits.maximum_arrow_bytes:
+            raise ArrowAdmissionError
+        return chunk
+
+
+def admit_record_batches(
+    schema: pa.Schema,
+    batches: Iterable[pa.RecordBatch],
+    limits: ArrowAdmissionLimits,
+) -> InMemoryArrowBatchSource:
+    """Incrementally admit and retain one complete bounded result for later replay."""
+
+    state = _AdmissionState(schema, limits)
+    admitted: list[pa.RecordBatch] = []
+    finished = False
+    try:
+        for batch in batches:
+            state.admit(batch)
+            admitted.append(batch)
+        state.finish()
+        finished = True
+    finally:
+        if not finished:
+            state.close()
+    return InMemoryArrowBatchSource(schema=schema, batches=tuple(admitted))
+
+
 async def admitted_ipc_chunks(
     source: ArrowBatchSource,
     limits: ArrowAdmissionLimits,
 ) -> AsyncIterator[bytes]:
     """Validate actual batches and yield one bounded Arrow IPC chunk at a time."""
 
-    schema = source.schema
-    _validate_schema(schema, limits)
-    sink = _ChunkSink()
-    writer = pa.ipc.new_stream(sink, schema)
-    rows = 0
-    decoded_bytes = 0
-    arrow_bytes = 0
-    writer_closed = False
+    state = _AdmissionState(source.schema, limits)
+    finished = False
     try:
         async for batch in source.open():
-            if not isinstance(batch, pa.RecordBatch):
-                raise ArrowAdmissionError
-            if not batch.schema.equals(schema, check_metadata=True):
-                raise ArrowAdmissionError
-
-            rows += batch.num_rows
-            decoded_bytes += batch.nbytes
-            if rows > limits.maximum_rows or decoded_bytes > limits.maximum_decoded_bytes:
-                raise ArrowAdmissionError
-            if _maximum_cell_bytes(batch) > limits.maximum_cell_bytes:
-                raise ArrowAdmissionError
-
-            writer.write_batch(batch)
-            chunk = sink.drain()
-            arrow_bytes += len(chunk)
-            if arrow_bytes > limits.maximum_arrow_bytes:
-                raise ArrowAdmissionError
+            chunk = state.admit(batch)
             if chunk:
                 yield chunk
 
-        writer.close()
-        writer_closed = True
-        chunk = sink.drain()
-        arrow_bytes += len(chunk)
-        if arrow_bytes > limits.maximum_arrow_bytes:
-            raise ArrowAdmissionError
+        chunk = state.finish()
+        finished = True
         if chunk:
             yield chunk
     finally:
-        if not writer_closed:
-            writer.close()
+        if not finished:
+            state.close()
 
 
 def _validate_schema(schema: pa.Schema, limits: ArrowAdmissionLimits) -> None:

@@ -1,18 +1,26 @@
 """Single-process, loopback-only Snowglobe application."""
 
-import uvicorn
+import argparse
+import sys
+from collections.abc import AsyncIterator, Sequence
+from contextlib import asynccontextmanager
+from pathlib import Path
 
-from snowglobe.mcp_gateway import server
+import uvicorn
+from starlette.applications import Starlette
+
+from snowglobe import mcp_gateway
 from snowglobe.mvp_limits import MVP_ARROW_LIMITS
 from snowglobe.result_api import create_app as create_result_api
 from snowglobe.runtime import broker
+from snowglobe.snowflake_executor import create_snowflake_executor
 
 
 def create_app():
     """Serve MCP and viewer routes from the runtime that owns the local broker."""
 
     result_api = create_result_api(broker=broker, admission_limits=MVP_ARROW_LIMITS)
-    application = server.streamable_http_app(
+    application = mcp_gateway.server.streamable_http_app(
         stateless_http=True,
         json_response=True,
         debug=False,
@@ -20,13 +28,47 @@ def create_app():
     application.router.routes[0:0] = result_api.router.routes
     application.state.broker = result_api.state.broker
     application.state.admission_limits = result_api.state.admission_limits
+    original_lifespan = application.router.lifespan_context
+
+    @asynccontextmanager
+    async def lifespan(app: Starlette) -> AsyncIterator[None]:
+        async with original_lifespan(app):
+            try:
+                yield
+            finally:
+                executor = mcp_gateway.submission_executor
+                if executor is not None:
+                    await executor.close()
+
+    application.router.lifespan_context = lifespan
     return application
 
 
 app = create_app()
 
 
-def main() -> None:
+def main(argv: Sequence[str] | None = None) -> int:
     """Run one local analyst service without exposing it to the network."""
 
+    parser = argparse.ArgumentParser(description="Run the local Snowglobe service.")
+    parser.add_argument(
+        "--config",
+        type=Path,
+        help="explicitly enable configured Snowflake execution with this local profile file",
+    )
+    parser.add_argument("--profile", default="default")
+    arguments = parser.parse_args(argv)
+
+    if arguments.config is not None:
+        try:
+            mcp_gateway.submission_executor = create_snowflake_executor(
+                broker=broker,
+                config_path=arguments.config,
+                profile_name=arguments.profile,
+            )
+        except Exception:
+            print("Snowglobe startup failed.", file=sys.stderr)
+            return 1
+
     uvicorn.run(app, host="127.0.0.1", port=8000)
+    return 0

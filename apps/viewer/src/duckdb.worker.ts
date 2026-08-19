@@ -29,7 +29,7 @@ const publishedTable = "snowglobe_result";
 
 type WorkerRequest =
   | { type: "initialize" | "destroy" | "abort"; sequence?: number }
-  | { type: "stream-start"; maximumFrameBytes: number; sequence: number }
+  | { type: "stream-start"; maximumResultBytes: number; sequence: number }
   | { type: "stream-chunk"; chunk: Uint8Array; sequence: number }
   | { type: "stream-end"; sequence: number }
   | { type: "viewport"; offset: number; limit: number; sequence: number };
@@ -75,11 +75,11 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     if (event.data.type === "stream-start") {
       if (provisionalResult) throw new Error("stream already started");
       provisionalResult = new ProvisionalResult(
-        event.data.maximumFrameBytes,
+        event.data.maximumResultBytes,
         createIncrementalArrowSink(
           activeConnection,
           pendingTable,
-          event.data.maximumFrameBytes,
+          event.data.maximumResultBytes,
           async () => {
             await activeConnection.query(
               `ALTER TABLE "${pendingTable}" RENAME TO "${publishedTable}"`,

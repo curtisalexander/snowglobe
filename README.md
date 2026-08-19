@@ -36,22 +36,23 @@ and viewer routes run in one process and bind to loopback for individual use.
 
 ## Status
 
-Snowglobe is still a synthetic proof and is **not ready for real credentials or
+Snowglobe is still a test-environment MVP and is **not ready for real credentials or
 sensitive data**. Implemented pieces include:
 
 - explicit low-level MCP contracts for `submit_read_query` and
   `get_query_status`;
 - a single-analyst broker with pending, complete, failed, cancelled, and expired
   lifecycle states;
-- an injectable synthetic background executor that registers pending work before an
-  accepted receipt;
+- a configured background Snowflake executor that registers a request-scoped cursor
+  before acceptance, fetches incrementally, and publishes only admitted results;
 - local viewer routes to list, find, cancel, and stream a request;
 - incremental Arrow admission and failure-atomic framing; and
 - in-memory DuckDB-Wasm ingestion with a bounded main-thread viewport.
 
-The deployable submit tool intentionally still returns `SERVICE_UNAVAILABLE`: the
-synthetic executor is test-only until SQL policy and execution limits guard configured
-Snowflake work in the same path.
+The submit tool returns `SERVICE_UNAVAILABLE` unless the supported launcher is
+explicitly given a local configuration file. The real executor and minimum browser
+boundary assurance now exist, but `SECURITY.md` still prohibits credentials until the
+Gate 5 constrained-test procedure in [`PLAN.md`](PLAN.md) is documented.
 
 - [Implementation plan](PLAN.md)
 - [Single-analyst architecture decision](docs/decisions/0008-single-analyst-loopback-runtime.md)
@@ -110,7 +111,7 @@ npm test
 npm run build
 ```
 
-The future Snowflake executor reads a local `connections.toml` profile. Start from
+The Snowflake executor reads a local `connections.toml` profile. Start from
 [`connections.example.toml`](connections.example.toml); never commit the real file or
 private key. Snowglobe accepts both files only when they are regular files owned by the
 current user, are not symlinks, and grant no permissions to the group or other users.
@@ -129,6 +130,11 @@ uv run snowglobe-preflight --config connections.toml --profile default
 The explicit `--connect` mode is reserved for the constrained MVP test procedure after
 the mandatory safety gates in [`PLAN.md`](PLAN.md) pass. It opens and closes one
 Snowflake cursor, executes no SQL, and prints only a fixed pass/fail message.
+
+The local service's `--config connections.toml --profile default` options explicitly
+enable configured execution. They are likewise reserved for the Gate 5 procedure;
+starting without `--config` remains fail-closed. The connected procedure must install
+the optional connector first with `uv sync --extra snowflake`.
 
 The constrained MVP accepts one pending request for at most five minutes. Connection
 timeouts are 30 seconds for login, 60 seconds for network retries, and 15 seconds per

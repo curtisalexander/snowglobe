@@ -33,8 +33,8 @@ INPUT_FIELDS = frozenset({"sql", "purpose", "requested_ttl"})
 STATUS_INPUT_FIELDS = frozenset({"request_id"})
 REQUEST_ID_PATTERN = "^[A-Za-z0-9_-]{20,32}$"
 
-# The deployable scaffold remains fail-closed. Tests may inject a synthetic admitted
-# executor; real configuration must wait for SQL policy and execution limits.
+# The default remains fail-closed. The supported launcher installs a configured
+# executor only when the analyst explicitly selects a local profile file.
 submission_executor: BackgroundQueryExecutor | None = None
 
 SUBMIT_READ_QUERY = Tool(
@@ -126,7 +126,7 @@ async def call_tool(
             if submission_executor is None:
                 return _receipt(ReasonCode.SERVICE_UNAVAILABLE)
             try:
-                request = submission_executor.submit(
+                request = await submission_executor.submit(
                     sql=arguments["sql"],
                     purpose=arguments["purpose"],
                     requested_ttl=timedelta(seconds=arguments["requested_ttl"]),

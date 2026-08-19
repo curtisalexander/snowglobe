@@ -1,6 +1,6 @@
 # Single-analyst local threat model
 
-**Status:** Synthetic proof
+**Status:** Pre-connected MVP boundary assurance complete
 **Last updated:** August 19, 2026
 
 ## Scope and claim

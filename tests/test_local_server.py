@@ -25,7 +25,7 @@ def test_local_launcher_binds_only_to_loopback(monkeypatch: MonkeyPatch) -> None
 
     monkeypatch.setattr(local_server.uvicorn, "run", run)
 
-    local_server.main()
+    assert local_server.main([]) == 0
 
     assert invocation == {
         "app": local_server.app,

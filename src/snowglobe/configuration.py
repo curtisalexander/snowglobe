@@ -58,6 +58,7 @@ def build_connector_arguments(profile: SnowflakeProfile) -> dict[str, object]:
         "database": profile.database,
         "warehouse": profile.warehouse,
         "role": profile.role,
+        "client_prefetch_threads": 1,
         "login_timeout": MVP_LOGIN_TIMEOUT_SECONDS,
         "network_timeout": MVP_NETWORK_TIMEOUT_SECONDS,
         "socket_timeout": MVP_SOCKET_TIMEOUT_SECONDS,
