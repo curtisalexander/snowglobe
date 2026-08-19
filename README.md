@@ -10,6 +10,10 @@
 through Snowflake configuration, preflight, launch, MCP client setup, and the first
 viewer result.
 
+**Reviewing or extending the code? Read the [developer guide](docs/developer-guide.md)**
+for the architecture, end-to-end call paths, file ownership, invariants, and suggested
+code-review order.
+
 Snowglobe lets a coding agent submit governed read-only SQL without putting the query
 result into the MCP response. Submission will run asynchronously and return an opaque
 request ID. The agent may poll that ID for a small lifecycle state, while the analyst
@@ -25,13 +29,13 @@ uses the same ID in a local viewer to inspect the result.
                                  │ shared local broker    │
                                  ▼                        │
                       ┌──────────────────────┐             │
-                      │ local viewer backend│◀────────────┘
+                      │ local viewer backend │◀────────────┘
                       └──────────┬───────────┘
                                  │ admitted Arrow stream
                                  ▼
                       ┌──────────────────────┐
-                      │ browser worker      │
-                      │ + DuckDB-Wasm       │
+                      │ browser worker       │
+                      │ + DuckDB-Wasm        │
                       └──────────────────────┘
 ```
 
@@ -64,6 +68,7 @@ now exist. `SECURITY.md` authorizes only that constrained connected test.
 - [Implementation plan](PLAN.md)
 - [Constrained MVP test runbook](docs/constrained-mvp-runbook.md)
 - [Getting started](docs/getting-started.md)
+- [Developer architecture and review guide](docs/developer-guide.md)
 - [Value-free MVP evidence template](docs/mvp-evidence-template.md)
 - [Single-analyst architecture decision](docs/decisions/0008-single-analyst-loopback-runtime.md)
 - [Threat model](docs/threat-model.md)

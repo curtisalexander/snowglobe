@@ -21,7 +21,7 @@ The safest pattern is to split the system into two paths:
 ┌──────────────┐   tool call   ┌─────────────┐   validated request   ┌───────────┐
 │ Coding agent │──────────────▶│ MCP gateway │──────────────────────▶│ Snowflake │
 │ + LLM        │◀──────────────│             │◀──────────────────────│           │
-└──────────────┘ fixed receipt └──────┬──────┘  rows stay server-side └───────────┘
+└──────────────┘ fixed receipt └──────┬──────┘ rows stay server-side └───────────┘
                                       │
                                       │ opaque execution association
                                       ▼
@@ -285,8 +285,8 @@ The preferred interactive viewer can use Apache Arrow as the transport format an
 │  ┌─────────────────────────────────────────────────────────────┴─┐  │
 │  │ Web Worker                                                    │  │
 │  │ Arrow batches → DuckDB-Wasm table → local SQL → visible page  │  │
-│  └───────────────────────────────▲────────────────────────────────┘  │
-└──────────────────────────────────┼───────────────────────────────────┘
+│  └───────────────────────────────▲───────────────────────────────┘  │
+└──────────────────────────────────┼──────────────────────────────────┘
                                    │ authenticated Arrow IPC stream
                           ┌────────┴────────┐
                           │ Result API      │

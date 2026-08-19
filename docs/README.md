@@ -8,6 +8,8 @@
 - [Snowflake configuration](configuration.md) — current `connections.toml` contract.
 - [Getting started](getting-started.md) — clone, Snowflake setup, preflight, launch,
   Amp, Codex, Claude Code, Continue.dev, and the first result-free agent flow.
+- [Developer guide](developer-guide.md) — implemented architecture, end-to-end call
+  paths, module ownership, invariants, tests, and a practical code-review order.
 - [Constrained MVP runbook](constrained-mvp-runbook.md) — exact non-production setup,
   operation, lifecycle, shutdown, restart, and evidence procedure for Gate 5.
 - [Connected MVP evidence template](mvp-evidence-template.md) — value-free checklist

@@ -33,7 +33,7 @@ protected from other processes running as the analyst.
 │                         │                                                │
 │                         ├── process-local request broker                 │
 │                         │                                                │
-│ browser ◀──Arrow── local viewer backend                                 │
+│ browser ◀──Arrow── local viewer backend                                  │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
