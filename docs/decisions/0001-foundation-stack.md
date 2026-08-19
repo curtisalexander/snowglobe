@@ -1,6 +1,6 @@
 # ADR 0001: Foundation stack and service boundaries
 
-- **Status:** Superseded in part by [ADR 0008](0008-single-analyst-loopback-runtime.md)
+- **Status:** Superseded in part by [ADR 0008](0008-single-analyst-loopback-runtime.md) and [ADR 0012](0012-svelte-viewer.md)
 - **Date:** August 18, 2026
 
 ## Context

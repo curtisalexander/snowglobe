@@ -14,8 +14,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "jsx": "react-jsx",
     "types": ["vite/client", "vitest/globals"]
   },
-  "include": ["src", "vite.config.ts", "eslint.config.js"]
+  "include": ["src/**/*.ts", "src/**/*.svelte", "vite.config.ts", "eslint.config.js"]
 }

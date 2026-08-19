@@ -150,7 +150,7 @@ environment and in the order below.
 
 ### Already complete — reusable foundation
 
-- [x] Record the low-level MCP, SQLGlot, Snowflake connector, Arrow, React, and
+- [x] Record the low-level MCP, SQLGlot, Snowflake connector, Arrow, Svelte, and
   DuckDB-Wasm architecture.
 - [x] Implement strict `connections.toml` loading, explicit connector arguments, and
   PEM/DER RSA key conversion.

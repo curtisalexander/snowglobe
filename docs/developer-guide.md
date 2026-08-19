@@ -38,7 +38,7 @@ browser worker.
                                   │ bounded viewport
                                   ▼
                        ┌──────────────────────┐
-                       │ React main thread    │
+                       │ Svelte main thread   │
                        └──────────────────────┘
 ```
 
@@ -93,7 +93,7 @@ The accepted decisions behind these rules are primarily
 ```text
 snowglobe/
 ├── src/snowglobe/          Python runtime, policy, execution, broker, HTTP
-├── apps/viewer/src/        React UI, stream parser, worker, DuckDB-Wasm
+├── apps/viewer/src/        Svelte UI, stream parser, worker, DuckDB-Wasm
 ├── tests/                  Backend and cross-boundary pytest suite
 ├── docs/decisions/         Accepted architecture decisions
 ├── docs/                   Runbooks, threat model, and implementation guides
@@ -123,7 +123,7 @@ For a fail-closed local development session that cannot execute Snowflake querie
 # Terminal 1: MCP, viewer routes, and broker
 uv run snowglobe-local
 
-# Terminal 2: React/Vite viewer with a backend proxy
+# Terminal 2: Svelte/Vite viewer with a backend proxy
 npm run dev
 ```
 
@@ -157,7 +157,8 @@ preflight, launch, client, prompt, and shutdown procedure in the
 
 | File | Owns |
 |---|---|
-| [`App.tsx`](../apps/viewer/src/App.tsx) | Request discovery, explicit open action, worker lifecycle, table rendering |
+| [`App.svelte`](../apps/viewer/src/App.svelte) | Request discovery, explicit open action, worker lifecycle, table rendering |
+| [`main.ts`](../apps/viewer/src/main.ts) | Svelte application mount point |
 | [`result-api.ts`](../apps/viewer/src/result-api.ts) | Strict viewer-route response parsing and stream opening |
 | [`result-stream.ts`](../apps/viewer/src/result-stream.ts) | Binary framing parser and provisional publication protocol |
 | [`arrow-ingest.ts`](../apps/viewer/src/arrow-ingest.ts) | Backpressured Arrow record-batch ingestion into DuckDB |
@@ -453,11 +454,11 @@ payloads.
 
 ## 12. Browser ingestion and publication
 
-The browser data path is intentionally split between React's main thread and a
+The browser data path is intentionally split between Svelte's main thread and a
 dedicated application worker:
 
 ```text
-App.tsx
+App.svelte
 ├── list or look up request metadata
 ├── explicit “Open result” action
 ├── fetch framed stream through result-api.ts
@@ -498,8 +499,8 @@ chunks are transferred rather than copied when posted to the worker.
 
 Finally, [`createViewport()`](../apps/viewer/src/viewport.ts) converts only bounded
 cells to strings, hex-encodes binary, uses ISO timestamps, preserves null, and enforces
-the same 256-KiB text budget. React renders values as normal text nodes, so HTML-like or
-prompt-like values remain inert.
+the same 256-KiB text budget. Svelte escapes interpolated values and renders them as
+text nodes, so HTML-like or prompt-like values remain inert.
 
 ## 13. Fixed MVP budgets
 
@@ -591,7 +592,7 @@ To rebuild context quickly, review in this order:
 2. [SECURITY.md](../SECURITY.md)
 3. [PLAN.md](../PLAN.md), especially the MVP target and deferred work
 4. [ADR 0008](decisions/0008-single-analyst-loopback-runtime.md) through
-   [ADR 0011](decisions/0011-bounded-snowflake-execution.md)
+   [ADR 0012](decisions/0012-svelte-viewer.md)
 
 You should finish this pass able to state what MCP may disclose and why the viewer is
 not an authentication boundary.
@@ -627,10 +628,11 @@ or cleaned up at the moment a public state changes?**
 5. [`duckdb.worker.ts`](../apps/viewer/src/duckdb.worker.ts)
 6. [`worker.ts`](../apps/viewer/src/worker.ts)
 7. [`viewport.ts`](../apps/viewer/src/viewport.ts)
-8. [`App.tsx`](../apps/viewer/src/App.tsx)
+8. [`App.svelte`](../apps/viewer/src/App.svelte)
 
 Follow the same bytes from Snowflake table to record batch, admitted source, framed
-HTTP payload, provisional table, published table, bounded viewport, and React text.
+HTTP payload, provisional table, published table, bounded viewport, and escaped Svelte
+text.
 
 ### Pass 5: proof and current gaps
 

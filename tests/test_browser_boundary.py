@@ -6,8 +6,8 @@ VIEWER_SOURCE = Path("apps/viewer/src")
 def production_viewer_source() -> str:
     return "\n".join(
         path.read_text(encoding="utf-8")
-        for path in sorted(VIEWER_SOURCE.glob("*.ts*"))
-        if not path.name.endswith(".test.ts") and not path.name.endswith(".test.tsx")
+        for path in sorted(VIEWER_SOURCE.iterdir())
+        if path.suffix in {".svelte", ".ts", ".tsx"} and ".test." not in path.name
     )
 
 
@@ -51,8 +51,8 @@ def test_duckdb_worker_has_no_external_reader_or_extension_surface() -> None:
 
 
 def test_result_stream_is_opened_only_by_explicit_request_action() -> None:
-    app = (VIEWER_SOURCE / "App.tsx").read_text(encoding="utf-8")
+    app = (VIEWER_SOURCE / "App.svelte").read_text(encoding="utf-8")
 
     assert app.count("openResultStream(") == 1
-    assert "onClick={() => void loadRequest(request.requestId)}" in app
-    assert "useEffect(() => {\n    void loadRequest" not in app
+    assert "onclick={() => void loadRequest(request.requestId)}" in app
+    assert "onMount(() => {\n    void loadRequest" not in app
