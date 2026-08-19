@@ -6,7 +6,10 @@ if ! command -v uv >/dev/null 2>&1; then
   curl -LsSf https://astral.sh/uv/install.sh | sh
 fi
 
-if ! node --version 2>/dev/null | grep -Eq '^v(2[2-9]|[3-9][0-9])\.'; then
+if ! node -e '
+const [major, minor] = process.versions.node.split(".").map(Number);
+if (major < 22 || (major === 22 && minor < 12)) process.exit(1);
+' 2>/dev/null; then
   echo "Installing Node.js 24"
   node_archive="$(curl -LsSf https://nodejs.org/dist/latest-v24.x/SHASUMS256.txt \
     | awk '/linux-x64.tar.xz$/ && !found {print $2; found=1}')"
@@ -30,9 +33,4 @@ if ! node --version 2>/dev/null | grep -Eq '^v(2[2-9]|[3-9][0-9])\.'; then
   done
 fi
 
-echo "Installing locked Python dependencies"
-uv python install 3.12
-uv sync --locked
-
-echo "Installing locked viewer dependencies"
-npm ci
+./scripts/setup.sh

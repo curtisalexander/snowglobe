@@ -6,8 +6,12 @@
 - [Architecture decisions](decisions/README.md) — accepted technical and security decisions; these take precedence when older source material differs.
 - [Local threat model](threat-model.md) — loopback trust boundary, data flows, limitations, and required evidence.
 - [Snowflake configuration](configuration.md) — current `connections.toml` contract.
+- [Getting started](getting-started.md) — clone, Snowflake setup, preflight, launch,
+  Amp, Codex, Claude Code, Continue.dev, and the first result-free agent flow.
 - [Constrained MVP runbook](constrained-mvp-runbook.md) — exact non-production setup,
   operation, lifecycle, shutdown, restart, and evidence procedure for Gate 5.
+- [Connected MVP evidence template](mvp-evidence-template.md) — value-free checklist
+  to copy outside the repository for the connected campaign.
 - [Querido reuse audit](querido-reference.md) — pinned source review and reuse boundary.
 
 ## Retained source material

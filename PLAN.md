@@ -1,6 +1,6 @@
 # Snowglobe implementation plan
 
-**Status:** Gates 1–4 and Gate 5 documentation are complete; constrained environment setup is next
+**Status:** Implementation is ready for external connected-MVP validation; Gate 5 connected evidence is next
 **Last updated:** August 19, 2026
 **Current decision:** [ADR 0011](docs/decisions/0011-bounded-snowflake-execution.md)
 **Retained source proposal:** [architecture-proposal.md](docs/architecture-proposal.md)
@@ -250,6 +250,9 @@ MCP, logs, errors, URLs, browser persistence, or provisional worker state.
   for the constrained Snowflake test environment.
 - [x] Update `SECURITY.md` from “no credentials” to permit only the documented MVP
   test configuration once Gates 1–4 pass.
+- [x] Prepare clone-level locked setup and check commands, current configuration
+  documentation, Amp/Codex/Claude Code/Continue.dev MCP client instructions, a first
+  agent prompt, and a value-free evidence template for the external operator.
 - [ ] Configure the dedicated test profile and run the value-free preflight;
   independently verify its role grants, allowlisted objects, warehouse, and resource
   monitor.
@@ -364,7 +367,10 @@ virtualization, export, or polished packaging.
 
 ## 12. Immediate next items
 
-Gates 1–4, the exact Gate 5 constrained-environment procedure, and its narrow security
-policy exception are complete. Configure the dedicated non-production test profile
-next, run the value-free preflight, and independently verify the role grants,
+Gates 1–4 and the connection-free MVP handoff are complete. A fresh POSIX clone can
+install locked dependencies with `./scripts/setup.sh`, run the complete local suite
+with `./scripts/check.sh`, configure a Streamable HTTP MCP client, and follow the exact
+Gate 5 campaign. The external operator must now configure the dedicated non-production
+test profile, run the value-free preflight, and independently verify role grants,
 allowlisted objects, warehouse, and resource monitor before any query is submitted.
+Snowglobe must not be described as connected-MVP verified until that evidence passes.

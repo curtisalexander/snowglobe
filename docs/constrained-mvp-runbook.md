@@ -80,11 +80,14 @@ artifacts.
 
 ## 3. Local setup
 
-Install the pinned project dependencies and optional connector:
+Use Linux or macOS for the credential-bearing MVP runtime. Native Windows does not
+provide the reviewed POSIX owner and no-follow file checks and is not currently a
+supported connected host.
+
+Install the exact locked project dependencies and optional connector:
 
 ```bash
-uv sync --extra snowflake
-npm install
+./scripts/setup.sh
 ```
 
 Copy `connections.example.toml` to an untracked path outside the repository when
@@ -158,7 +161,9 @@ place a proxy or tunnel in front of them.
 
 Configure the test MCP client with only the MCP endpoint. Connection profile, role,
 warehouse, database, authenticator, and key path are launcher-owned and must never be
-tool arguments.
+tool arguments. The [getting-started guide](getting-started.md) provides setup for Amp,
+Codex, Claude Code, and Continue.dev, plus the expected two-tool surface and a first
+prompt.
 
 ## 6. Submit, poll, and inspect
 
@@ -261,13 +266,15 @@ confirm Local Storage, Session Storage, IndexedDB, Cache Storage, and OPFS conta
 result data and that no service worker is registered; do not inspect the result stream
 in the Network panel.
 
-Retain a value-free checklist containing only the date, software revision, case name,
+Copy the [value-free evidence template](mvp-evidence-template.md) outside the
+repository and retain only the permitted fields: date, software revision, case name,
 pass/fail, lifecycle/reason code, and administrator confirmation of bounded execution
 and expected grants/usage. Opaque request IDs may be recorded but are not required. Do
 not retain query results, screenshots, SQL text, profile values, object/account names,
 query IDs, driver errors, query-history rows, timings, sizes, or usage values.
 
-Finally run and retain only command names, exit status, and summary counts for:
+Finally run `./scripts/check.sh` and retain only the individual command names, exit
+status, and summary counts. The script runs:
 
 ```bash
 uv run ruff format --check .

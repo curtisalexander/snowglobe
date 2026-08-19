@@ -15,9 +15,10 @@ private_key_path = "/run/secrets/snowglobe_snowflake_key.p8"
 database = "GOVERNED_DATABASE"
 warehouse = "SNOWGLOBE_WAREHOUSE"
 role = "SNOWGLOBE_READER"
+allowed_views = ["GOVERNED_DATABASE.GOVERNED_SCHEMA.APPROVED_VIEW"]
 ```
 
-## Initial contract
+## MVP contract
 
 | Field | Meaning |
 |---|---|
@@ -28,13 +29,18 @@ role = "SNOWGLOBE_READER"
 | `database` | Approved default database; passed directly to Snowflake connector parameter `database` |
 | `warehouse` | Dedicated bounded Snowglobe warehouse |
 | `role` | Least-privileged read role; never overridable by MCP input |
+| `allowed_views` | Non-empty exact list of fully qualified `DATABASE.SCHEMA.VIEW` relations accepted by SQL policy |
 
 The current loader rejects missing or unknown fields and selects a named profile supplied by local startup code, not tool input. Database, warehouse, role, authenticator, key path, and profile name are therefore analyst configuration—not agent-controlled query parameters.
 
-The connector-argument builder copies only the seven allowlisted driver parameters
-shown below; it does not forward the TOML document or the key path:
+The connector-argument builder copies only reviewed driver parameters; it does not
+forward the TOML document, `allowed_views`, or the key path. It supplies:
 
-`account`, `user`, `authenticator`, `private_key`, `database`, `warehouse`, and `role`.
+- `account`, `user`, `authenticator`, in-memory `private_key`, `database`, `warehouse`,
+  and `role` from the selected profile;
+- one client prefetch thread and fixed login, network, and socket timeouts; and
+- fixed `ABORT_DETACHED_QUERY`, statement-timeout, and queue-timeout session
+  parameters.
 
 While building those arguments, the private-key loader:
 
@@ -44,11 +50,15 @@ While building those arguments, the private-key loader:
 4. converts it in memory to unencrypted PKCS#8 DER expected by `snowflake.connector.connect`; and
 5. avoids logging, tracing, serializing, or returning the path or key bytes.
 
-Timeouts, session parameters, and other server-owned execution controls will be added
-only after they are reviewed against the pinned driver. They are not accepted from
-`connections.toml` or MCP input.
+The profile and key must each be an owner-readable regular file owned by the current
+user, must not be a symlink, and must grant no permissions to group or other users.
+Owner mode `0400` or `0600` is accepted. Snowglobe opens the final path without
+following symlinks and fails closed when the host cannot provide that operation.
 
-Config/key ownership and permission enforcement remains a Milestone 0 task because local files and container secret mounts require different policies. The present loader verifies readability but does not yet enforce a permission mode.
+The MVP launcher is therefore supported on POSIX environments that provide user IDs,
+owner permission bits, and `O_NOFOLLOW`, including current Linux and macOS. Native
+Windows is not currently a supported credential host; use a reviewed POSIX host rather
+than weakening file checks.
 
 Encrypted-key passphrases are intentionally not part of this first file contract. If needed, they must come from a secret manager or process secret—not a committed configuration file.
 
@@ -56,7 +66,9 @@ Encrypted-key passphrases are intentionally not part of this first file contract
 
 - The real `connections.toml` is ignored by Git.
 - Common private-key files (`*.pem`, `*.key`, and `*.p8`) are ignored, but deployment policy must protect key material regardless of extension.
-- Prefer an absolute key path backed by a mounted secret with owner-only permissions.
+- Keep both files outside the repository when possible and set each to mode `0600`.
+- Use an absolute key path. Secret mounts are accepted only when they appear as an
+  owner-only regular file and satisfy the same checks.
 - Do not place this configuration in an agent workspace or browser-served directory.
 - Do not add a CLI or MCP tool that prints the resolved profile.
 
