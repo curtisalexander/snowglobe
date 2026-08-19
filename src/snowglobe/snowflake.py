@@ -7,6 +7,8 @@ from typing import Protocol, cast
 
 
 class SnowflakeCursor(Protocol):
+    def cancel(self) -> None: ...
+
     def close(self) -> None: ...
 
 

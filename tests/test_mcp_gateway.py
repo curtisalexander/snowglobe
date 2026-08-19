@@ -1,8 +1,10 @@
 import asyncio
 import json
+from collections.abc import AsyncIterator
 from datetime import timedelta
 
 import httpx2
+import pyarrow as pa
 from mcp import Client, ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from mcp.types import TextContent
@@ -10,7 +12,16 @@ from pytest import CaptureFixture, MonkeyPatch
 
 from snowglobe import mcp_gateway
 from snowglobe.broker import InProcessBroker
+from snowglobe.executor import BackgroundQueryExecutor, QueryPolicyRejected
 from snowglobe.mcp_gateway import app, server
+
+
+class Source:
+    schema = pa.schema([("RESULT_COLUMN_CANARY", pa.string())])
+
+    async def open(self) -> AsyncIterator[pa.RecordBatch]:
+        if False:
+            yield pa.record_batch([], schema=self.schema)
 
 
 def test_advertises_only_the_two_exact_tool_contracts() -> None:
@@ -110,6 +121,161 @@ def test_invalid_arguments_return_only_fixed_reason() -> None:
             assert result.structured_content is not None
             assert result.structured_content["reason_code"] == "INVALID_REQUEST"
             assert canary not in result.model_dump_json()
+
+    asyncio.run(exercise())
+
+
+def test_synthetic_submission_returns_accepted_only_after_pending_startup(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    request_broker = InProcessBroker()
+    started = asyncio.Event()
+    release = asyncio.Event()
+    source = Source()
+    canary = "SUBMISSION_VALUE_CANARY"
+
+    def admit(sql: str, purpose: str):
+        assert canary in sql
+        assert purpose == canary
+
+        async def work(request_id: str) -> Source:
+            assert request_broker.get_request(request_id).status.value == "pending"
+            started.set()
+            await release.wait()
+            return source
+
+        return work
+
+    monkeypatch.setattr(mcp_gateway, "broker", request_broker)
+    monkeypatch.setattr(
+        mcp_gateway,
+        "submission_executor",
+        BackgroundQueryExecutor(broker=request_broker, admit=admit),
+    )
+
+    async def exercise() -> None:
+        async with Client(server) as client:
+            accepted = await client.call_tool(
+                "submit_read_query",
+                {
+                    "sql": f"select '{canary}'",
+                    "purpose": canary,
+                    "requested_ttl": 60,
+                },
+            )
+            assert accepted.structured_content is not None
+            request_id = accepted.structured_content["request_id"]
+            assert accepted.structured_content == {
+                "status": "accepted",
+                "request_id": request_id,
+                "reason_code": "NONE",
+            }
+            assert isinstance(accepted.content[0], TextContent)
+            assert json.loads(accepted.content[0].text) == accepted.structured_content
+            assert canary not in accepted.model_dump_json()
+
+            await started.wait()
+            pending = await client.call_tool("get_query_status", {"request_id": request_id})
+            assert pending.structured_content == {
+                "request_id": request_id,
+                "status": "pending",
+            }
+
+            release.set()
+            while request_broker.get_request(request_id).status.value == "pending":
+                await asyncio.sleep(0)
+            complete = await client.call_tool("get_query_status", {"request_id": request_id})
+            assert complete.structured_content == {
+                "request_id": request_id,
+                "status": "complete",
+            }
+            assert canary not in complete.model_dump_json()
+
+    asyncio.run(exercise())
+
+
+def test_background_execution_failure_exposes_only_failed_without_process_output(
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
+) -> None:
+    request_broker = InProcessBroker()
+    finished = asyncio.Event()
+    sql_canary = "EXECUTION_SQL_CANARY"
+    purpose_canary = "EXECUTION_PURPOSE_CANARY"
+    error_canary = "EXECUTION_ERROR_CANARY"
+
+    def admit(sql: str, purpose: str):
+        assert sql_canary in sql
+        assert purpose == purpose_canary
+
+        async def work(_request_id: str) -> Source:
+            finished.set()
+            raise RuntimeError(error_canary)
+
+        return work
+
+    monkeypatch.setattr(mcp_gateway, "broker", request_broker)
+    monkeypatch.setattr(
+        mcp_gateway,
+        "submission_executor",
+        BackgroundQueryExecutor(broker=request_broker, admit=admit),
+    )
+
+    async def exercise() -> None:
+        async with Client(server) as client:
+            accepted = await client.call_tool(
+                "submit_read_query",
+                {
+                    "sql": f"select '{sql_canary}'",
+                    "purpose": purpose_canary,
+                    "requested_ttl": 60,
+                },
+            )
+            assert accepted.structured_content is not None
+            request_id = accepted.structured_content["request_id"]
+
+            await finished.wait()
+            while request_broker.get_request(request_id).status.value == "pending":
+                await asyncio.sleep(0)
+            failed = await client.call_tool("get_query_status", {"request_id": request_id})
+
+            assert failed.structured_content == {
+                "request_id": request_id,
+                "status": "failed",
+            }
+            model_visible = accepted.model_dump_json() + failed.model_dump_json()
+            for canary in (sql_canary, purpose_canary, error_canary):
+                assert canary not in model_visible
+
+    asyncio.run(exercise())
+    captured = capsys.readouterr()
+    for canary in (sql_canary, purpose_canary, error_canary):
+        assert canary not in captured.out
+        assert canary not in captured.err
+
+
+def test_synthetic_policy_rejection_uses_only_fixed_reason(monkeypatch: MonkeyPatch) -> None:
+    request_broker = InProcessBroker()
+
+    def reject(_sql: str, _purpose: str):
+        raise QueryPolicyRejected
+
+    monkeypatch.setattr(
+        mcp_gateway,
+        "submission_executor",
+        BackgroundQueryExecutor(broker=request_broker, admit=reject),
+    )
+
+    async def exercise() -> None:
+        async with Client(server) as client:
+            result = await client.call_tool(
+                "submit_read_query",
+                {"sql": "select 1", "purpose": "test", "requested_ttl": 60},
+            )
+            assert result.structured_content is not None
+            assert result.structured_content["status"] == "rejected"
+            assert result.structured_content["reason_code"] == "POLICY_REJECTED"
+            assert request_broker.list_requests() == ()
 
     asyncio.run(exercise())
 

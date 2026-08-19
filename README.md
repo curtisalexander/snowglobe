@@ -43,13 +43,15 @@ sensitive data**. Implemented pieces include:
   `get_query_status`;
 - a single-analyst broker with pending, complete, failed, cancelled, and expired
   lifecycle states;
+- an injectable synthetic background executor that registers pending work before an
+  accepted receipt;
 - local viewer routes to list, find, cancel, and stream a request;
 - incremental Arrow admission and failure-atomic framing; and
 - in-memory DuckDB-Wasm ingestion with a bounded main-thread viewport.
 
-The submit tool intentionally still returns `SERVICE_UNAVAILABLE`: SQL policy,
-Snowflake execution, and atomic asynchronous registration are not connected yet. The
-next implementation item is that governed executor path.
+The deployable submit tool intentionally still returns `SERVICE_UNAVAILABLE`: the
+synthetic executor is test-only until SQL policy and execution limits guard configured
+Snowflake work in the same path.
 
 - [Implementation plan](PLAN.md)
 - [Single-analyst architecture decision](docs/decisions/0008-single-analyst-loopback-runtime.md)

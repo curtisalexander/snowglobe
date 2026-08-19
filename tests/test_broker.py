@@ -28,6 +28,17 @@ class Source:
             yield pa.record_batch([], schema=self.schema)
 
 
+class Cursor:
+    def __init__(self, *, error: Exception | None = None) -> None:
+        self.cancel_count = 0
+        self._error = error
+
+    def cancel(self) -> None:
+        self.cancel_count += 1
+        if self._error is not None:
+            raise self._error
+
+
 def test_pending_submission_can_be_published_atomically() -> None:
     clock = Clock(datetime(2026, 8, 18, tzinfo=UTC))
     broker = InProcessBroker(maximum_ttl=timedelta(minutes=15), clock=clock)
@@ -81,6 +92,46 @@ def test_failed_cancelled_and_expired_requests_have_no_result_source() -> None:
     for request_id in (failed.request_id, cancelled.request_id, expired.request_id):
         with pytest.raises(RequestUnavailable, match=r"^$"):
             broker.open_source(request_id)
+
+
+def test_cancellation_targets_only_the_registered_request_cursor_and_is_idempotent() -> None:
+    broker = InProcessBroker()
+    first = broker.submit(requested_ttl=timedelta(minutes=5))
+    second = broker.submit(requested_ttl=timedelta(minutes=5))
+    first_cursor = Cursor()
+    second_cursor = Cursor()
+    broker.register_cursor(first.request_id, first_cursor)
+    broker.register_cursor(second.request_id, second_cursor)
+
+    assert broker.cancel(first.request_id).status is RequestStatus.CANCELLED
+    assert broker.cancel(first.request_id).status is RequestStatus.CANCELLED
+
+    assert first_cursor.cancel_count == 1
+    assert second_cursor.cancel_count == 0
+    assert broker.get_request(second.request_id).status is RequestStatus.PENDING
+
+
+def test_cursor_created_after_cancellation_is_immediately_cancelled() -> None:
+    broker = InProcessBroker()
+    request = broker.submit(requested_ttl=timedelta(minutes=5))
+    cursor = Cursor()
+    broker.cancel(request.request_id)
+
+    with pytest.raises(RequestUnavailable, match=r"^$"):
+        broker.register_cursor(request.request_id, cursor)
+
+    assert cursor.cancel_count == 1
+
+
+def test_cursor_cancellation_failure_is_private_and_remains_idempotent() -> None:
+    broker = InProcessBroker()
+    request = broker.submit(requested_ttl=timedelta(minutes=5))
+    cursor = Cursor(error=RuntimeError("DRIVER_ERROR_CANARY"))
+    broker.register_cursor(request.request_id, cursor)
+
+    assert broker.cancel(request.request_id).status is RequestStatus.CANCELLED
+    assert broker.cancel(request.request_id).status is RequestStatus.CANCELLED
+    assert cursor.cancel_count == 1
 
 
 def test_unknown_request_failure_does_not_reflect_identifier() -> None:

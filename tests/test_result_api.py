@@ -125,6 +125,7 @@ def test_list_open_and_cancel_local_requests() -> None:
     listed = client.get("/v1/requests")
     opened = client.get(f"/v1/requests/{item.request_id}")
     cancelled = client.post(f"/v1/requests/{item.request_id}/cancel")
+    cancelled_again = client.post(f"/v1/requests/{item.request_id}/cancel")
 
     assert listed.status_code == 200
     assert listed.json() == {"requests": [opened.json()]}
@@ -134,7 +135,8 @@ def test_list_open_and_cancel_local_requests() -> None:
         "expires_at": item.expires_at.isoformat(),
     }
     assert cancelled.json()["status"] == "cancelled"
-    for response in (listed, opened, cancelled):
+    assert cancelled_again.json()["status"] == "cancelled"
+    for response in (listed, opened, cancelled, cancelled_again):
         assert_security_headers(response)
 
     unavailable_stream = client.get(f"/v1/requests/{item.request_id}/stream")

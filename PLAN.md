@@ -134,8 +134,8 @@ Rules:
 - [x] Model pending, complete, failed, cancelled, and expired states.
 - [x] Sanitize malformed calls and unexpected exceptions.
 - [x] Verify exact capabilities and a real Streamable HTTP round trip.
-- [ ] Connect synthetic submission to a background executor as one atomic accepted path.
-- [ ] Prove values and internal errors remain absent from process output around execution.
+- [x] Connect synthetic submission to a background executor as one atomic accepted path.
+- [x] Prove values and internal errors remain absent from process output around execution.
 
 #### Local viewer backend and browser
 
@@ -182,7 +182,7 @@ JavaScript row store.
 - [ ] Add reviewed statement, queue, login, network, and detached-query settings.
 - [ ] Start execution asynchronously and register request/cursor before returning accepted.
 - [ ] Keep Snowflake query IDs, credentials, tokens, and driver errors private.
-- [ ] Use one request-scoped cursor and idempotent cancellation; never cancel all cursors.
+- [x] Use one request-scoped cursor and idempotent cancellation; never cancel all cursors.
 - [ ] Retrieve `fetch_arrow_batches()` incrementally with backpressure.
 - [ ] Never concatenate full results, call `to_pylist()`, build full row dictionaries,
   fall back to `fetchall()`, or place result bytes in a local agent-visible file.
@@ -256,11 +256,7 @@ The architecture migration and explicit connector-argument builder are complete.
 next implementation item is the remaining **governed asynchronous Snowflake executor
 seam**:
 
-1. add request-scoped cursor registration and idempotent cancellation;
-2. submit work in the background and atomically publish a pending broker record before
-   returning `accepted`;
-3. transition only to closed lifecycle states through MCP; and
-4. expose incremental Arrow only to the local viewer after admission.
+1. expose incremental Arrow only to the local viewer after admission.
 
 Do not connect acceptance to real Snowflake until SQL AST policy and execution limits
 are enforced in the same path.

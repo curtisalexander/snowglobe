@@ -2,6 +2,7 @@
 
 import json
 import secrets
+from datetime import timedelta
 from typing import Any
 
 from mcp.server import Server, ServerRequestContext
@@ -22,6 +23,7 @@ from snowglobe.contracts import (
     ReasonCode,
     ReceiptStatus,
 )
+from snowglobe.executor import BackgroundQueryExecutor, QueryPolicyRejected
 from snowglobe.runtime import broker
 
 SUBMIT_TOOL_NAME = "submit_read_query"
@@ -29,6 +31,10 @@ STATUS_TOOL_NAME = "get_query_status"
 INPUT_FIELDS = frozenset({"sql", "purpose", "requested_ttl"})
 STATUS_INPUT_FIELDS = frozenset({"request_id"})
 REQUEST_ID_PATTERN = "^[A-Za-z0-9_-]{20,32}$"
+
+# The deployable scaffold remains fail-closed. Tests may inject a synthetic admitted
+# executor; real configuration must wait for SQL policy and execution limits.
+submission_executor: BackgroundQueryExecutor | None = None
 
 SUBMIT_READ_QUERY = Tool(
     name=SUBMIT_TOOL_NAME,
@@ -112,12 +118,21 @@ async def call_tool(
 
     try:
         if params.name == SUBMIT_TOOL_NAME:
-            if not _valid_arguments(params.arguments):
+            arguments = params.arguments
+            if arguments is None or not _valid_arguments(arguments):
                 return _receipt(ReasonCode.INVALID_REQUEST)
 
-            # The scaffold remains fail-closed until SQL policy, Snowflake execution,
-            # and request registration are connected as one accepted path.
-            return _receipt(ReasonCode.SERVICE_UNAVAILABLE)
+            if submission_executor is None:
+                return _receipt(ReasonCode.SERVICE_UNAVAILABLE)
+            try:
+                request = submission_executor.submit(
+                    sql=arguments["sql"],
+                    purpose=arguments["purpose"],
+                    requested_ttl=timedelta(seconds=arguments["requested_ttl"]),
+                )
+            except QueryPolicyRejected:
+                return _receipt(ReasonCode.POLICY_REJECTED)
+            return _accepted_receipt(request.request_id)
 
         if params.name == STATUS_TOOL_NAME:
             request_id = _valid_status_arguments(params.arguments)
@@ -177,6 +192,24 @@ def _receipt(reason_code: ReasonCode) -> CallToolResult:
         status=ReceiptStatus.REJECTED,
         request_id=secrets.token_urlsafe(18),
         reason_code=reason_code,
+    )
+    structured_content = receipt.model_dump(mode="json")
+    return CallToolResult(
+        content=[
+            TextContent(
+                type="text",
+                text=json.dumps(structured_content, separators=(",", ":")),
+            )
+        ],
+        structured_content=structured_content,
+    )
+
+
+def _accepted_receipt(request_id: str) -> CallToolResult:
+    receipt = QueryReceipt(
+        status=ReceiptStatus.ACCEPTED,
+        request_id=request_id,
+        reason_code=ReasonCode.NONE,
     )
     structured_content = receipt.model_dump(mode="json")
     return CallToolResult(

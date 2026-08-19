@@ -8,6 +8,9 @@ class FakeCursor:
         self._events = events
         self._close_error = close_error
 
+    def cancel(self) -> None:
+        self._events.append("cursor.cancel")
+
     def close(self) -> None:
         self._events.append("cursor.close")
         if self._close_error is not None:
