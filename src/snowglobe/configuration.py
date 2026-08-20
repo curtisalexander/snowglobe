@@ -16,17 +16,17 @@ from snowglobe.private_key import load_private_key
 from snowglobe.secure_file import SecureFileError, read_secure_file
 
 SCHEMA_VERSION = 1
-ROOT_FIELDS = frozenset({"schema_version", "connections"})
-PROFILE_FIELDS = frozenset(
+SNOWGLOBE_ROOT_FIELDS = frozenset({"schema_version", "profiles"})
+SNOWGLOBE_PROFILE_FIELDS = frozenset({"allowed_views"})
+CONNECTION_FIELDS = frozenset(
     {
         "account",
         "user",
         "authenticator",
-        "private_key_path",
+        "private_key_file",
         "database",
         "warehouse",
         "role",
-        "allowed_views",
     }
 )
 
@@ -40,10 +40,14 @@ class SnowflakeProfile:
     account: str
     user: str
     authenticator: str
-    private_key_path: Path
+    private_key_file: Path
     database: str
     warehouse: str
     role: str
+
+
+@dataclass(frozen=True, slots=True)
+class SnowglobeProfile:
     allowed_views: tuple[str, ...]
 
 
@@ -54,7 +58,7 @@ def build_connector_arguments(profile: SnowflakeProfile) -> dict[str, object]:
         "account": profile.account,
         "user": profile.user,
         "authenticator": profile.authenticator,
-        "private_key": load_private_key(profile.private_key_path),
+        "private_key": load_private_key(profile.private_key_file),
         "database": profile.database,
         "warehouse": profile.warehouse,
         "role": profile.role,
@@ -70,28 +74,15 @@ def build_connector_arguments(profile: SnowflakeProfile) -> dict[str, object]:
     }
 
 
-def load_profile(path: Path, profile_name: str) -> SnowflakeProfile:
-    """Load one server-selected profile, rejecting unknown or malformed input."""
+def load_snowflake_profile(path: Path, profile_name: str) -> SnowflakeProfile:
+    """Load reviewed fields from one native Snowflake connection definition."""
 
     try:
         document = tomllib.loads(read_secure_file(path).decode("utf-8"))
-        _require_exact_fields(document, ROOT_FIELDS)
-        if document["schema_version"] != SCHEMA_VERSION:
-            raise ConfigurationError
-
-        connections = document["connections"]
-        if not isinstance(connections, dict):
-            raise ConfigurationError
-        profile = connections[profile_name]
+        profile = document[profile_name]
         if not isinstance(profile, dict):
             raise ConfigurationError
-        _require_exact_fields(profile, PROFILE_FIELDS)
-        values = {
-            field: _required_string(profile[field])
-            for field in PROFILE_FIELDS
-            if field != "allowed_views"
-        }
-        allowed_views = _required_string_list(profile["allowed_views"])
+        values = {field: _required_string(profile[field]) for field in CONNECTION_FIELDS}
         if values["authenticator"] != "SNOWFLAKE_JWT":
             raise ConfigurationError
     except (
@@ -109,12 +100,41 @@ def load_profile(path: Path, profile_name: str) -> SnowflakeProfile:
         account=values["account"],
         user=values["user"],
         authenticator=values["authenticator"],
-        private_key_path=Path(values["private_key_path"]).expanduser(),
+        private_key_file=Path(values["private_key_file"]).expanduser(),
         database=values["database"],
         warehouse=values["warehouse"],
         role=values["role"],
-        allowed_views=allowed_views,
     )
+
+
+def load_snowglobe_profile(path: Path, profile_name: str) -> SnowglobeProfile:
+    """Load one exact Snowglobe-owned SQL policy profile."""
+
+    try:
+        document = tomllib.loads(read_secure_file(path).decode("utf-8"))
+        _require_exact_fields(document, SNOWGLOBE_ROOT_FIELDS)
+        if document["schema_version"] != SCHEMA_VERSION:
+            raise ConfigurationError
+        profiles = document["profiles"]
+        if not isinstance(profiles, dict):
+            raise ConfigurationError
+        profile = profiles[profile_name]
+        if not isinstance(profile, dict):
+            raise ConfigurationError
+        _require_exact_fields(profile, SNOWGLOBE_PROFILE_FIELDS)
+        allowed_views = _required_string_list(profile["allowed_views"])
+    except (
+        KeyError,
+        OSError,
+        SecureFileError,
+        tomllib.TOMLDecodeError,
+        UnicodeError,
+        TypeError,
+        ValueError,
+    ) as error:
+        raise ConfigurationError from error
+
+    return SnowglobeProfile(allowed_views=allowed_views)
 
 
 def _require_exact_fields(value: dict[str, Any], expected: frozenset[str]) -> None:

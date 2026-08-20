@@ -30,7 +30,7 @@ class FakeConnection:
         self._events.append("connection.close")
 
 
-def write_profile(tmp_path: Path) -> Path:
+def write_profile(tmp_path: Path) -> tuple[Path, Path]:
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     key_path = tmp_path / "key.p8"
     key_path.write_bytes(
@@ -41,38 +41,46 @@ def write_profile(tmp_path: Path) -> Path:
         )
     )
     key_path.chmod(0o600)
-    config_path = tmp_path / "connections.toml"
-    config_path.write_text(
+    connections_path = tmp_path / "connections.toml"
+    connections_path.write_text(
         f"""\
-schema_version = 1
-
-[connections.default]
+[default]
 account = "organization-account"
 user = "SNOWGLOBE_SERVICE_USER"
 authenticator = "SNOWFLAKE_JWT"
-private_key_path = "{key_path}"
+private_key_file = "{key_path}"
 database = "GOVERNED_DATABASE"
 warehouse = "SNOWGLOBE_WAREHOUSE"
 role = "SNOWGLOBE_READER"
+""",
+        encoding="utf-8",
+    )
+    connections_path.chmod(0o600)
+    snowglobe_path = tmp_path / "snowglobe.toml"
+    snowglobe_path.write_text(
+        """\
+schema_version = 1
+
+[profiles.default]
 allowed_views = ["GOVERNED_DATABASE.GOVERNED_SCHEMA.APPROVED_VIEW"]
 """,
         encoding="utf-8",
     )
-    config_path.chmod(0o600)
-    return config_path
+    snowglobe_path.chmod(0o600)
+    return connections_path, snowglobe_path
 
 
 def test_local_preflight_does_not_connect(tmp_path: Path) -> None:
-    config_path = write_profile(tmp_path)
+    connections_path, snowglobe_path = write_profile(tmp_path)
 
     def unexpected_connect(**_arguments: object) -> FakeConnection:
         raise AssertionError("local preflight must not connect")
 
-    run_preflight(config_path, "default", connect=unexpected_connect)
+    run_preflight(connections_path, snowglobe_path, "default", connect=unexpected_connect)
 
 
 def test_connected_preflight_opens_no_query(tmp_path: Path) -> None:
-    config_path = write_profile(tmp_path)
+    connections_path, snowglobe_path = write_profile(tmp_path)
     events: list[str] = []
 
     def connect(**arguments: object) -> FakeConnection:
@@ -80,7 +88,13 @@ def test_connected_preflight_opens_no_query(tmp_path: Path) -> None:
         events.append("connect")
         return FakeConnection(events)
 
-    run_preflight(config_path, "default", check_connection=True, connect=connect)
+    run_preflight(
+        connections_path,
+        snowglobe_path,
+        "default",
+        check_connection=True,
+        connect=connect,
+    )
 
     assert events == ["connect", "connection.cursor", "cursor.close", "connection.close"]
 
@@ -92,7 +106,7 @@ def test_cli_output_does_not_expose_failure(
     canary = "PREFLIGHT_SECRET_CANARY"
     missing_path = tmp_path / canary
 
-    assert main(["--config", str(missing_path)]) == 1
+    assert main(["--connections", str(missing_path)]) == 1
 
     captured = capsys.readouterr()
     assert captured.out == ""
@@ -104,9 +118,19 @@ def test_cli_reports_value_free_success(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    config_path = write_profile(tmp_path)
+    connections_path, snowglobe_path = write_profile(tmp_path)
 
-    assert main(["--config", str(config_path)]) == 0
+    assert (
+        main(
+            [
+                "--connections",
+                str(connections_path),
+                "--snowglobe-config",
+                str(snowglobe_path),
+            ]
+        )
+        == 0
+    )
 
     captured = capsys.readouterr()
     assert captured.out == "Snowglobe preflight passed.\n"

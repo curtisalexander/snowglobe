@@ -21,7 +21,8 @@ class Runtime:
 
 def create_runtime(
     *,
-    config_path: Path | None = None,
+    connections_path: Path | None = None,
+    snowglobe_config_path: Path | None = None,
     profile_name: str = "default",
     connect: SnowflakeConnect | None = None,
 ) -> Runtime:
@@ -29,11 +30,14 @@ def create_runtime(
         maximum_ttl=MVP_MAXIMUM_TTL,
         maximum_pending_requests=MVP_MAXIMUM_PENDING_REQUESTS,
     )
+    if (connections_path is None) != (snowglobe_config_path is None):
+        raise ValueError
     executor = None
-    if config_path is not None:
+    if connections_path is not None and snowglobe_config_path is not None:
         executor = create_snowflake_executor(
             broker=broker,
-            config_path=config_path,
+            connections_path=connections_path,
+            snowglobe_config_path=snowglobe_config_path,
             profile_name=profile_name,
             connect=connect,
         )

@@ -94,16 +94,18 @@ Install the exact locked project dependencies and optional connector:
 
 On Windows PowerShell, run `./scripts/setup.ps1`.
 
-Copy `connections.example.toml` to an untracked path outside the repository when
-possible. Populate exactly one test profile. `allowed_views` must contain only the
-fully qualified administrator-approved views; use `database`, never `db`. Do not add
-unknown fields.
+Use an existing native Snowflake `connections.toml`, or copy
+`connections.example.toml` to an untracked path outside the repository. Copy
+`snowglobe.example.toml` separately. Populate matching test profiles. The Snowglobe
+profile's `allowed_views` must contain only the fully qualified
+administrator-approved views; use `database`, never `db`.
 
 The profile and key must be regular files owned by the operator, not symlinks, with no
 group or other permissions. The owner must have read permission:
 
 ```bash
 chmod 600 /absolute/private/path/connections.toml
+chmod 600 /absolute/private/path/snowglobe.toml
 chmod 600 /absolute/private/path/snowglobe-test-key.p8
 ```
 
@@ -112,9 +114,11 @@ read/write access:
 
 ```powershell
 $config = "$env:USERPROFILE\.snowglobe\connections.toml"
+$policy = "$env:USERPROFILE\.snowglobe\snowglobe.toml"
 $key = "$env:USERPROFILE\.snowglobe\snowglobe-test-key.p8"
 $account = "$env:USERDOMAIN\$env:USERNAME"
 icacls $config /inheritance:r /grant:r "${account}:(R,W)"
+icacls $policy /inheritance:r /grant:r "${account}:(R,W)"
 icacls $key /inheritance:r /grant:r "${account}:(R,W)"
 ```
 
@@ -125,7 +129,8 @@ Validate configuration, key parsing, and the SQL view allowlist without connecti
 
 ```bash
 uv run snowglobe-preflight \
-  --config /absolute/private/path/connections.toml \
+  --connections /absolute/private/path/connections.toml \
+  --snowglobe-config /absolute/private/path/snowglobe.toml \
   --profile default
 ```
 
@@ -141,7 +146,8 @@ Open and close one Snowflake cursor without executing SQL:
 
 ```bash
 uv run snowglobe-preflight \
-  --config /absolute/private/path/connections.toml \
+  --connections /absolute/private/path/connections.toml \
+  --snowglobe-config /absolute/private/path/snowglobe.toml \
   --profile default \
   --connect
 ```
@@ -156,7 +162,8 @@ the selected context differs from the reviewed configuration.
 
 ```bash
 uv run snowglobe-local \
-  --config /absolute/private/path/connections.toml \
+  --connections /absolute/private/path/connections.toml \
+  --snowglobe-config /absolute/private/path/snowglobe.toml \
   --profile default
 ```
 
@@ -220,9 +227,10 @@ For Pi, install the package as documented in the
 tool with the same fields. The extension passes SQL to the result-free CLI over stdin.
 Use the raw CLI only for adapter diagnosis.
 
-Replace the example relation with one exact `allowed_views` entry. Keep identifiers
-fully qualified. Do not put a result canary literal in SQL or `purpose`; the canary
-must originate in the approved view. Functions are not allowed in submitted MVP SQL.
+Replace the example relation with one exact Snowglobe `allowed_views` entry. Keep
+identifiers fully qualified. Do not put a result canary literal in SQL or `purpose`;
+the canary must originate in the approved view. Functions are not allowed in submitted
+MVP SQL.
 
 The accepted MCP, Pi tool, or CLI response must contain only `status`, `request_id`,
 and `reason_code`. Poll `get_query_status` with only that `request_id`; for raw CLI

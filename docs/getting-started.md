@@ -67,22 +67,30 @@ The full connected campaign needs the additional empty, multi-batch, overflow,
 timeout, cancellation, and unapproved views in
 [runbook section 2](constrained-mvp-runbook.md#2-administrator-owned-environment-setup).
 
-## 3. Create the private profile
+## 3. Create the private profiles
 
-Copy `connections.example.toml` to a private path outside the repository and replace
-every placeholder:
+Use your existing native Snowflake `connections.toml`, or copy
+`connections.example.toml` to a private path outside the repository and replace every
+placeholder:
+
+```toml
+[default]
+account = "your-organization-your-account"
+user = "SNOWGLOBE_TEST_USER"
+authenticator = "SNOWFLAKE_JWT"
+private_key_file = "/absolute/private/path/snowglobe-test-key.p8"
+database = "YOUR_TEST_DATABASE"
+warehouse = "YOUR_TEST_WAREHOUSE"
+role = "YOUR_SNOWGLOBE_READER_ROLE"
+```
+
+Copy `snowglobe.example.toml` to a separate private path and configure Snowglobe's
+query policy:
 
 ```toml
 schema_version = 1
 
-[connections.default]
-account = "your-organization-your-account"
-user = "SNOWGLOBE_TEST_USER"
-authenticator = "SNOWFLAKE_JWT"
-private_key_path = "/absolute/private/path/snowglobe-test-key.p8"
-database = "YOUR_TEST_DATABASE"
-warehouse = "YOUR_TEST_WAREHOUSE"
-role = "YOUR_SNOWGLOBE_READER_ROLE"
+[profiles.default]
 allowed_views = [
   "YOUR_TEST_DATABASE.YOUR_TEST_SCHEMA.YOUR_APPROVED_VIEW",
 ]
@@ -95,30 +103,35 @@ Field rules:
 
 - `account` is the identifier expected by the Snowflake Python connector;
 - use `database`, never `db`;
-- `private_key_path` must be an absolute path to an unencrypted PEM or DER RSA key;
+- `private_key_file` must be an absolute path to an unencrypted PEM or DER RSA key;
 - `allowed_views` must be non-empty and contain exact, fully qualified
   `DATABASE.SCHEMA.VIEW` names; and
-- missing, duplicate, or unknown fields are rejected.
+- missing Snowflake fields and missing, duplicate, or unknown Snowglobe policy fields
+  are rejected.
 
-The profile name, role, warehouse, database, authenticator, key path, and allowlist are
-launcher-owned. Never put them in a prompt or MCP tool arguments.
+The same profile name selects the Snowflake connection and Snowglobe policy. The role,
+warehouse, database, authenticator, key path, and allowlist are launcher-owned. Never
+put them in a prompt or MCP tool arguments.
 
-Make both files owner-only regular files:
+Make all three files owner-only regular files:
 
 ```bash
 chmod 600 /absolute/private/path/connections.toml
+chmod 600 /absolute/private/path/snowglobe.toml
 chmod 600 /absolute/private/path/snowglobe-test-key.p8
 ```
 
 On Windows, create them on local NTFS storage, then remove inherited access and grant
-your current account read/write access. Run this from PowerShell after setting the two
+your current account read/write access. Run this from PowerShell after setting the three
 paths:
 
 ```powershell
 $config = "$env:USERPROFILE\.snowglobe\connections.toml"
+$policy = "$env:USERPROFILE\.snowglobe\snowglobe.toml"
 $key = "$env:USERPROFILE\.snowglobe\snowglobe-test-key.p8"
 $account = "$env:USERDOMAIN\$env:USERNAME"
 icacls $config /inheritance:r /grant:r "${account}:(R,W)"
+icacls $policy /inheritance:r /grant:r "${account}:(R,W)"
 icacls $key /inheritance:r /grant:r "${account}:(R,W)"
 ```
 
@@ -134,7 +147,8 @@ First validate the profile, key, and allowlist without connecting:
 
 ```bash
 uv run snowglobe-preflight \
-  --config /absolute/private/path/connections.toml \
+  --connections /absolute/private/path/connections.toml \
+  --snowglobe-config /absolute/private/path/snowglobe.toml \
   --profile default
 ```
 
@@ -143,7 +157,8 @@ constrained exception, open and close one cursor without executing SQL:
 
 ```bash
 uv run snowglobe-preflight \
-  --config /absolute/private/path/connections.toml \
+  --connections /absolute/private/path/connections.toml \
+  --snowglobe-config /absolute/private/path/snowglobe.toml \
   --profile default \
   --connect
 ```
@@ -157,7 +172,8 @@ In the first terminal, run the one broker-owning process:
 
 ```bash
 uv run snowglobe-local \
-  --config /absolute/private/path/connections.toml \
+  --connections /absolute/private/path/connections.toml \
+  --snowglobe-config /absolute/private/path/snowglobe.toml \
   --profile default
 ```
 
@@ -329,7 +345,8 @@ Native MCP clients must see exactly:
 - `get_query_status(request_id)`
 
 It must not advertise Snowglobe resources, prompts, result readers, cancellation
-tools, or connection-setting inputs. If the runtime was started without `--config`, a
+tools, or connection-setting inputs. If the runtime was started without both
+configuration files, a
 submission correctly returns `SERVICE_UNAVAILABLE`.
 
 The Pi extension must register exactly the same two tools, with closed input schemas,
@@ -342,8 +359,8 @@ invocations become closed receipts without reflecting their input.
 ## 8. Run the first agent experiment
 
 Replace the relation below with one exact fully qualified entry from the private
-profile's `allowed_views`. Do not include canary values in the prompt or SQL; they must
-originate in the administrator-approved view.
+Snowglobe profile's `allowed_views`. Do not include canary values in the prompt or SQL;
+they must originate in the administrator-approved view.
 
 > Use Snowglobe to submit this governed read query:
 > `SELECT * FROM YOUR_TEST_DATABASE.YOUR_TEST_SCHEMA.YOUR_APPROVED_VIEW`.

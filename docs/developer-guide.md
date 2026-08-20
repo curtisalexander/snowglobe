@@ -205,11 +205,11 @@ snowglobe-preflight = "snowglobe.preflight:main"
 
 ```text
 local_server.main
-├── parse --config and --profile
+├── parse --connections, --snowglobe-config, and --profile
 ├── create_runtime
 │   ├── create one InProcessBroker
-│   ├── if --config is present, create_snowflake_executor
-│   │   ├── load_profile
+│   ├── if both configuration paths are present, create_snowflake_executor
+│   │   ├── load_snowflake_profile and load_snowglobe_profile
 │   │   ├── construct SnowflakeSqlPolicy
 │   │   ├── build_connector_arguments
 │   │   └── construct BackgroundQueryExecutor
@@ -227,16 +227,21 @@ both route sets refer to the runtime's exact broker object. On application shutd
 its lifespan closes the runtime, which cancels pending requests and waits for worker
 tasks to finish connector cleanup.
 
-Starting without `--config` constructs the control plane with no executor; submission
-then returns `SERVICE_UNAVAILABLE`. This is the fail-closed development mode, not a
-partially configured executor.
+Starting without both configuration paths constructs the control plane with no
+executor; submission then returns `SERVICE_UNAVAILABLE`. Supplying only one path fails
+startup. This is the fail-closed development mode, not a partially configured
+executor.
 
 ## 5. Configuration and credential path
 
-[`configuration.load_profile()`](../src/snowglobe/configuration.py) accepts an exact
-document shape: `schema_version` and a `connections` table containing named profiles.
-Each profile contains account, user, authenticator, private-key path, database,
-warehouse, role, and `allowed_views`. Unknown or missing fields fail.
+[`configuration.load_snowflake_profile()`](../src/snowglobe/configuration.py) reads a
+top-level profile from a native Snowflake `connections.toml`. It requires the fixed
+account, user, authenticator, private-key file, database, warehouse, and role fields;
+other native profiles and fields may remain but are not forwarded.
+
+[`configuration.load_snowglobe_profile()`](../src/snowglobe/configuration.py) reads the
+matching profile from a separate, versioned `snowglobe.toml`. Its exact policy schema
+contains `allowed_views`; unknown or missing fields fail.
 
 Before parsing either the TOML or private key, [`read_secure_file()`](../src/snowglobe/secure_file.py):
 

@@ -51,19 +51,21 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description="Run the local Snowglobe service.")
     parser.add_argument(
-        "--config",
+        "--connections",
         type=Path,
-        help="explicitly enable configured Snowflake execution with this local profile file",
+        help="native Snowflake connections.toml file",
     )
+    parser.add_argument("--snowglobe-config", type=Path, help="Snowglobe policy file")
     parser.add_argument("--profile", default="default")
     arguments = parser.parse_args(argv)
 
-    if arguments.config is None:
+    if arguments.connections is None and arguments.snowglobe_config is None:
         application = app
     else:
         try:
             runtime = create_runtime(
-                config_path=arguments.config,
+                connections_path=arguments.connections,
+                snowglobe_config_path=arguments.snowglobe_config,
                 profile_name=arguments.profile,
             )
             application = create_app(runtime)

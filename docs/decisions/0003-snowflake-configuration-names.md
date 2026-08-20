@@ -1,6 +1,6 @@
 # ADR 0003: Use Snowflake connector names in `connections.toml`
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR 0016](0016-separate-snowflake-and-snowglobe-configuration.md)
 - **Date:** August 18, 2026
 
 ## Context

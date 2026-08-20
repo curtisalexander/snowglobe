@@ -70,7 +70,7 @@ running as the analyst.
 | Browser analytics | In-memory DuckDB-Wasm in a dedicated application worker |
 | Browser persistence | No IndexedDB, OPFS, service-worker result cache, or automatic restoration |
 | SQL | One Snowflake `SELECT` or `WITH … SELECT` AST; deny everything else |
-| Snowflake config | Local `connections.toml`; fixed profile, role, warehouse, database, authenticator, and key path |
+| Configuration | Native local Snowflake `connections.toml` plus separate versioned Snowglobe `snowglobe.toml`; fixed profile, role, warehouse, database, authenticator, key path, and allowed views |
 | Admission | Independent compute, row, column, cell, Arrow-byte, and memory limits |
 | Oversized results | Reject; never silently truncate or spill into browser storage |
 | Initial exclusions | Viewer auth, accounts, sharing, export, remote hosting, tenants, uploads, external DuckDB readers, telemetry |
@@ -157,8 +157,8 @@ environment and in the order below.
 
 - [x] Record the low-level MCP, SQLGlot, Snowflake connector, Arrow, Svelte, and
   DuckDB-Wasm architecture.
-- [x] Implement strict `connections.toml` loading, explicit connector arguments, and
-  PEM/DER RSA key conversion.
+- [x] Implement native `connections.toml` loading, separate strict `snowglobe.toml`
+  policy loading, explicit connector arguments, and PEM/DER RSA key conversion.
 - [x] Implement the closed submission and lifecycle contracts, opaque IDs, local
   broker, and atomic synthetic background-executor seam.
 - [x] Implement the shared loopback-only MCP/viewer launcher.

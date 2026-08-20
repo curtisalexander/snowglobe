@@ -1,6 +1,6 @@
 # ADR 0010: Minimum Snowflake SELECT policy
 
-- **Status:** Accepted
+- **Status:** Accepted; configuration ownership superseded by [ADR 0016](0016-separate-snowflake-and-snowglobe-configuration.md)
 - **Date:** August 19, 2026
 - **Builds on:** [ADR 0009](0009-constrained-snowflake-mvp-budgets.md)
 

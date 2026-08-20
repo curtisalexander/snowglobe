@@ -15,7 +15,11 @@ from snowglobe.arrow_stream import (
     admit_record_batches,
 )
 from snowglobe.broker import InProcessBroker, RequestUnavailable
-from snowglobe.configuration import build_connector_arguments, load_profile
+from snowglobe.configuration import (
+    build_connector_arguments,
+    load_snowflake_profile,
+    load_snowglobe_profile,
+)
 from snowglobe.executor import BackgroundQueryExecutor, ExecutionStarted
 from snowglobe.mvp_limits import MVP_ARROW_LIMITS, MVP_STATEMENT_TIMEOUT_SECONDS
 from snowglobe.snowflake import SnowflakeConnect, SnowflakeCursor, request_cursor
@@ -86,16 +90,18 @@ class SnowflakeQueryAdmission:
 def create_snowflake_executor(
     *,
     broker: InProcessBroker,
-    config_path: Path,
+    connections_path: Path,
+    snowglobe_config_path: Path,
     profile_name: str,
     connect: SnowflakeConnect | None = None,
 ) -> BackgroundQueryExecutor:
     """Load one fixed profile and construct the configured background executor."""
 
-    profile = load_profile(config_path, profile_name)
+    connection = load_snowflake_profile(connections_path, profile_name)
+    snowglobe_profile = load_snowglobe_profile(snowglobe_config_path, profile_name)
     admission = SnowflakeQueryAdmission(
-        policy=SnowflakeSqlPolicy.from_view_names(profile.allowed_views),
-        connector_arguments=build_connector_arguments(profile),
+        policy=SnowflakeSqlPolicy.from_view_names(snowglobe_profile.allowed_views),
+        connector_arguments=build_connector_arguments(connection),
         connect=connect,
     )
     return BackgroundQueryExecutor(broker=broker, admit=admission)

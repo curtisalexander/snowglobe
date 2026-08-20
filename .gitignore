@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 connections.toml
+snowglobe.toml
 *.pem
 *.key
 *.p8

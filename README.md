@@ -182,16 +182,17 @@ npm run build
 ```
 
 For the connected test, follow the [constrained MVP runbook](docs/constrained-mvp-runbook.md)
-before starting either process. The Snowflake executor reads a local
-`connections.toml` profile. Start from
-[`connections.example.toml`](connections.example.toml); never commit the real file or
-private key. Snowglobe accepts both files only when they are regular files owned by the
+before starting either process. The Snowflake executor reads a native local
+`connections.toml` profile and a matching Snowglobe policy profile from
+`snowglobe.toml`. Start from [`connections.example.toml`](connections.example.toml)
+and [`snowglobe.example.toml`](snowglobe.example.toml); never commit the real files or
+private key. Snowglobe accepts all three only when they are regular files owned by the
 current user, are not symlinks or Windows reparse points, and grant no access to
 unprivileged other users. On POSIX, the owner must have read permission and may have
 write permission (`0400` or `0600`):
 
 ```bash
-chmod 600 connections.toml /path/to/snowflake-key.p8
+chmod 600 connections.toml snowglobe.toml /path/to/snowflake-key.p8
 ```
 
 On Windows, remove inherited ACL entries and grant only your account read/write access
@@ -200,24 +201,28 @@ On Windows, remove inherited ACL entries and grant only your account read/write 
 ```powershell
 $account = "$env:USERDOMAIN\$env:USERNAME"
 icacls C:\private\connections.toml /inheritance:r /grant:r "${account}:(R,W)"
+icacls C:\private\snowglobe.toml /inheritance:r /grant:r "${account}:(R,W)"
 icacls C:\private\snowflake-key.p8 /inheritance:r /grant:r "${account}:(R,W)"
 ```
 
 Validate the local profile and key without connecting to Snowflake:
 
 ```bash
-uv run snowglobe-preflight --config connections.toml --profile default
+uv run snowglobe-preflight \
+  --connections connections.toml \
+  --snowglobe-config snowglobe.toml \
+  --profile default
 ```
 
 The explicit `--connect` mode is permitted only by the constrained MVP test procedure.
 It opens and closes one Snowflake cursor, executes no SQL, and prints only a fixed
 pass/fail message.
 
-The local service's `--config connections.toml --profile default` options explicitly
-enable configured execution. They are likewise reserved for the Gate 5 procedure;
-starting without `--config` remains fail-closed. The connected procedure must install
-the optional connector first; the setup script does so with
-`uv sync --locked --extra snowflake`.
+The local service's `--connections connections.toml --snowglobe-config snowglobe.toml
+--profile default` options explicitly enable configured execution. They are likewise
+reserved for the Gate 5 procedure; starting without both configuration options remains
+fail-closed. The connected procedure must install the optional connector first; the
+setup script does so with `uv sync --locked --extra snowflake`.
 
 The constrained MVP accepts one pending request for at most five minutes. Connection
 timeouts are 30 seconds for login, 60 seconds for network retries, and 15 seconds per
@@ -226,10 +231,10 @@ socket operation. Snowflake statements have a 60-second server deadline and a
 and 256 KiB serialized and decoded Arrow so the complete admitted result fits the
 current viewer.
 
-Each profile also has an exact `allowed_views` list. MVP queries must reference one of
-those views as a fully qualified `DATABASE.SCHEMA.VIEW`. The initial function allowlist
-is intentionally empty: functions, UDFs, table functions, stages, variables, and
-partially qualified relations are rejected until separately reviewed.
+Each Snowglobe policy profile has an exact `allowed_views` list. MVP queries must
+reference one of those views as a fully qualified `DATABASE.SCHEMA.VIEW`. The initial
+function allowlist is intentionally empty: functions, UDFs, table functions, stages,
+variables, and partially qualified relations are rejected until separately reviewed.
 
 Use the [getting-started guide](docs/getting-started.md) for the complete clone,
 Snowflake profile, preflight, launch, Amp, Codex, Claude Code, Continue.dev, first-query,

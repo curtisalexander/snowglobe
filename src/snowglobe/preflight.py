@@ -5,13 +5,18 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from snowglobe.configuration import build_connector_arguments, load_profile
+from snowglobe.configuration import (
+    build_connector_arguments,
+    load_snowflake_profile,
+    load_snowglobe_profile,
+)
 from snowglobe.snowflake import SnowflakeConnect, request_cursor
 from snowglobe.sql_policy import SnowflakeSqlPolicy
 
 
 def run_preflight(
-    config_path: Path,
+    connections_path: Path,
+    snowglobe_config_path: Path,
     profile_name: str,
     *,
     check_connection: bool = False,
@@ -19,9 +24,10 @@ def run_preflight(
 ) -> None:
     """Validate local configuration and optionally open one result-free connection."""
 
-    profile = load_profile(config_path, profile_name)
-    SnowflakeSqlPolicy.from_view_names(profile.allowed_views)
-    arguments = build_connector_arguments(profile)
+    connection = load_snowflake_profile(connections_path, profile_name)
+    snowglobe_profile = load_snowglobe_profile(snowglobe_config_path, profile_name)
+    SnowflakeSqlPolicy.from_view_names(snowglobe_profile.allowed_views)
+    arguments = build_connector_arguments(connection)
     if check_connection:
         with request_cursor(arguments, connect=connect):
             pass
@@ -29,7 +35,8 @@ def run_preflight(
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Validate a local Snowglobe profile.")
-    parser.add_argument("--config", type=Path, default=Path("connections.toml"))
+    parser.add_argument("--connections", type=Path, default=Path("connections.toml"))
+    parser.add_argument("--snowglobe-config", type=Path, default=Path("snowglobe.toml"))
     parser.add_argument("--profile", default="default")
     parser.add_argument(
         "--connect",
@@ -40,7 +47,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         run_preflight(
-            arguments.config,
+            arguments.connections,
+            arguments.snowglobe_config,
             arguments.profile,
             check_connection=arguments.connect,
         )

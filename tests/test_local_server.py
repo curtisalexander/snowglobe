@@ -33,3 +33,14 @@ def test_local_launcher_binds_only_to_loopback(monkeypatch: MonkeyPatch) -> None
         "host": "127.0.0.1",
         "port": 8000,
     }
+
+
+def test_local_launcher_fails_closed_with_only_one_config_file(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    def unexpected_run(*_arguments: object, **_keywords: object) -> None:
+        raise AssertionError("invalid configuration must not start the server")
+
+    monkeypatch.setattr(local_server.uvicorn, "run", unexpected_run)
+
+    assert local_server.main(["--connections", "connections.toml"]) == 1
