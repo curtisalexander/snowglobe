@@ -205,10 +205,10 @@ local_server.main
 ├── create_runtime
 │   ├── create one InProcessBroker
 │   ├── if --config is present, create_snowflake_executor
-│       ├── load_profile
-│       ├── construct SnowflakeSqlPolicy
-│       ├── build_connector_arguments
-│       └── construct BackgroundQueryExecutor
+│   │   ├── load_profile
+│   │   ├── construct SnowflakeSqlPolicy
+│   │   ├── build_connector_arguments
+│   │   └── construct BackgroundQueryExecutor
 │   └── construct ControlPlane(broker, executor)
 ├── create_server(runtime.control)
 ├── compose MCP and viewer routes around the same runtime
@@ -372,23 +372,23 @@ The central call path is:
 MCP or CLI adapter
 └── ControlPlane.submit
     └── BackgroundQueryExecutor.submit
-    ├── SnowflakeQueryAdmission.__call__
-    │   └── policy.authorize(sql)                 synchronous rejection point
-    ├── broker.submit(...)                        creates PENDING record
-    ├── create background _run task
-    └── await started future
-        └── background work
-            └── asyncio.to_thread(_execute)
-                ├── acquire non-blocking one-query lock
-                ├── request_cursor(...)
-                │   ├── open connection
-                │   └── create cursor
-                ├── mark_started(cursor)
-                │   └── broker.register_cursor(...)  cancellation now controllable
-                ├── cursor.execute(governed_sql, timeout=60)
-                ├── fetch and admit complete result
-                ├── release private cursor association
-                └── close cursor and connection
+        ├── SnowflakeQueryAdmission.__call__
+        │   └── policy.authorize(sql)                 synchronous rejection point
+        ├── broker.submit(...)                        creates PENDING record
+        ├── create background _run task
+        └── await started future
+            └── background work
+                └── asyncio.to_thread(_execute)
+                    ├── acquire non-blocking one-query lock
+                    ├── request_cursor(...)
+                    │   ├── open connection
+                    │   └── create cursor
+                    ├── mark_started(cursor)
+                    │   └── broker.register_cursor(...)  cancellation now controllable
+                    ├── cursor.execute(governed_sql, timeout=60)
+                    ├── fetch and admit complete result
+                    ├── release private cursor association
+                    └── close cursor and connection
 ```
 
 Only after `mark_started()` resolves the `started` future can `submit()` return an
@@ -437,9 +437,9 @@ while complete.
 
 ```text
 PENDING ── publish admitted source ─────────────▶ COMPLETE
-   │                                               │
-   ├── execution/admission error ──▶ FAILED        ├── expiry ──▶ EXPIRED
-   ├── cancel ─────────────────────▶ CANCELLED     └── cancel ──▶ CANCELLED
+   │                                                 │
+   ├── execution/admission error ──▶ FAILED          ├── expiry ──▶ EXPIRED
+   ├── cancel ─────────────────────▶ CANCELLED       └── cancel ──▶ CANCELLED
    └── expiry ─────────────────────▶ EXPIRED
 ```
 

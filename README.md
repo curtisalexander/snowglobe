@@ -21,23 +21,23 @@ returns an opaque request ID. The agent may poll that ID for a small lifecycle s
 while the analyst uses the same ID in a local viewer to inspect the result.
 
 ```text
-                    MCP or CLI — control only
-┌──────────────┐     ┌────────────────────────┐     ┌───────────┐
-│ Analyst's    │────▶│ local Snowglobe runtime│────▶│ Snowflake │
-│ coding agent │◀────│ submit + status        │     │           │
-└──────────────┘     └───────────┬────────────┘     └─────┬─────┘
-       opaque ID + lifecycle     │                        │
-                                 │ shared local broker    │
-                                 ▼                        │
-                      ┌──────────────────────┐             │
-                      │ local viewer backend │◀────────────┘
-                      └──────────┬───────────┘
-                                 │ admitted Arrow stream
-                                 ▼
-                      ┌──────────────────────┐
-                      │ browser worker       │
-                      │ + DuckDB-Wasm        │
-                      └──────────────────────┘
+                       MCP or CLI — control only
+┌──────────────┐     ┌─────────────────────────┐     ┌───────────┐
+│ Analyst's    │────▶│ local Snowglobe runtime │────▶│ Snowflake │
+│ coding agent │◀────│ submit + status         │     │           │
+└──────────────┘     └────────────┬────────────┘     └─────┬─────┘
+       opaque ID + lifecycle      │                        │
+                                  │ shared local broker    │
+                                  ▼                        │
+                       ┌──────────────────────┐            │
+                       │ local viewer backend │◀───────────┘
+                       └──────────┬───────────┘
+                                  │ admitted Arrow stream
+                                  ▼
+                       ┌──────────────────────┐
+                       │ browser worker       │
+                       │ + DuckDB-Wasm        │
+                       └──────────────────────┘
 ```
 
 There are no viewer accounts, enterprise OIDC, tenants, owner claims, or sharing. MCP

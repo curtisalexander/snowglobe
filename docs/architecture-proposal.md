@@ -331,9 +331,9 @@ This preserves a useful analytical loop after the original query. A person can i
 DuckDB-Wasm is excellent for bounded analytical datasets, not an excuse to send an entire warehouse extract to a browser. The browser must not be responsible for discovering that a result is too large: by then the bytes have crossed the network and may already have exhausted browser memory. Admission belongs in the query gateway and Result API.
 
 ```diagram
-Agent SQL
-    │
-    ▼
+     Agent SQL
+         │
+         ▼
 ┌──────────────────┐
 │ SQL policy gate  │──reject unsafe or unbounded request
 └────────┬─────────┘
@@ -345,12 +345,14 @@ Agent SQL
          ▼
 ┌──────────────────┐
 │ Result gate      │──rows, Arrow bytes, cell size, memory estimate
-└──────┬─────┬─────┘
-       │     │
-  fits │     │ too large
-       ▼     ▼
- DuckDB-    Keep server-side;
- Wasm       require narrower query
+└────────┬─────────┘
+      ┌──┴────────────────────┐
+ fits │                       │ too large
+      ▼                       ▼
+┌───────────┐     ┌───────────────────────┐
+│ DuckDB-   │     │ Keep server-side;     │
+│ Wasm      │     │ require narrower query│
+└───────────┘     └───────────────────────┘
 ```
 
 #### Gate 1: impose a server-controlled result cap

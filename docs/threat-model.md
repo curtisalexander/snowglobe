@@ -30,7 +30,7 @@ application path, but it is not protected from other processes running as the an
 
 ```text
 ┌────────────────────── analyst's local security context ──────────────────────┐
-│ coding agent ──MCP / CLI / Pi──▶ local runtime ──configured ID──▶ Snowflake │
+│ coding agent ──MCP / CLI / Pi──▶ local runtime ──configured ID──▶ Snowflake  │
 │                                  │                                           │
 │                                  ├── process-local request broker            │
 │                                  │                                           │
