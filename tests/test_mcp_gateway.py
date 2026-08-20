@@ -10,10 +10,10 @@ from mcp.client.streamable_http import streamable_http_client
 from mcp.types import TextContent
 from pytest import CaptureFixture, MonkeyPatch
 
-from snowglobe import mcp_gateway
 from snowglobe.broker import InProcessBroker
+from snowglobe.control import ControlPlane
 from snowglobe.executor import BackgroundQueryExecutor
-from snowglobe.mcp_gateway import app, server
+from snowglobe.mcp_gateway import app, create_server, server
 from snowglobe.sql_policy import QueryPolicyRejected
 
 
@@ -126,9 +126,7 @@ def test_invalid_arguments_return_only_fixed_reason() -> None:
     asyncio.run(exercise())
 
 
-def test_synthetic_submission_returns_accepted_only_after_pending_startup(
-    monkeypatch: MonkeyPatch,
-) -> None:
+def test_synthetic_submission_returns_accepted_only_after_pending_startup() -> None:
     request_broker = InProcessBroker()
     started = asyncio.Event()
     release = asyncio.Event()
@@ -148,15 +146,15 @@ def test_synthetic_submission_returns_accepted_only_after_pending_startup(
 
         return work
 
-    monkeypatch.setattr(mcp_gateway, "broker", request_broker)
-    monkeypatch.setattr(
-        mcp_gateway,
-        "submission_executor",
-        BackgroundQueryExecutor(broker=request_broker, admit=admit),
+    synthetic_server = create_server(
+        ControlPlane(
+            broker=request_broker,
+            executor=BackgroundQueryExecutor(broker=request_broker, admit=admit),
+        )
     )
 
     async def exercise() -> None:
-        async with Client(server) as client:
+        async with Client(synthetic_server) as client:
             accepted = await client.call_tool(
                 "submit_read_query",
                 {
@@ -197,7 +195,6 @@ def test_synthetic_submission_returns_accepted_only_after_pending_startup(
 
 
 def test_background_execution_failure_exposes_only_failed_without_process_output(
-    monkeypatch: MonkeyPatch,
     capsys: CaptureFixture[str],
 ) -> None:
     request_broker = InProcessBroker()
@@ -217,15 +214,15 @@ def test_background_execution_failure_exposes_only_failed_without_process_output
 
         return work
 
-    monkeypatch.setattr(mcp_gateway, "broker", request_broker)
-    monkeypatch.setattr(
-        mcp_gateway,
-        "submission_executor",
-        BackgroundQueryExecutor(broker=request_broker, admit=admit),
+    synthetic_server = create_server(
+        ControlPlane(
+            broker=request_broker,
+            executor=BackgroundQueryExecutor(broker=request_broker, admit=admit),
+        )
     )
 
     async def exercise() -> None:
-        async with Client(server) as client:
+        async with Client(synthetic_server) as client:
             accepted = await client.call_tool(
                 "submit_read_query",
                 {
@@ -257,20 +254,21 @@ def test_background_execution_failure_exposes_only_failed_without_process_output
         assert canary not in captured.err
 
 
-def test_synthetic_policy_rejection_uses_only_fixed_reason(monkeypatch: MonkeyPatch) -> None:
+def test_synthetic_policy_rejection_uses_only_fixed_reason() -> None:
     request_broker = InProcessBroker()
 
     def reject(_sql: str, _purpose: str):
         raise QueryPolicyRejected
 
-    monkeypatch.setattr(
-        mcp_gateway,
-        "submission_executor",
-        BackgroundQueryExecutor(broker=request_broker, admit=reject),
+    synthetic_server = create_server(
+        ControlPlane(
+            broker=request_broker,
+            executor=BackgroundQueryExecutor(broker=request_broker, admit=reject),
+        )
     )
 
     async def exercise() -> None:
-        async with Client(server) as client:
+        async with Client(synthetic_server) as client:
             result = await client.call_tool(
                 "submit_read_query",
                 {"sql": "select 1", "purpose": "test", "requested_ttl": 60},
@@ -283,13 +281,13 @@ def test_synthetic_policy_rejection_uses_only_fixed_reason(monkeypatch: MonkeyPa
     asyncio.run(exercise())
 
 
-def test_status_tool_reports_only_lifecycle_state(monkeypatch: MonkeyPatch) -> None:
+def test_status_tool_reports_only_lifecycle_state() -> None:
     request_broker = InProcessBroker()
     item = request_broker.submit(requested_ttl=timedelta(minutes=5))
-    monkeypatch.setattr(mcp_gateway, "broker", request_broker)
+    synthetic_server = create_server(ControlPlane(broker=request_broker, executor=None))
 
     async def exercise() -> None:
-        async with Client(server) as client:
+        async with Client(synthetic_server) as client:
             pending = await client.call_tool(
                 "get_query_status",
                 {"request_id": item.request_id},
@@ -334,6 +332,8 @@ def test_unexpected_exception_is_sanitized(
     monkeypatch: MonkeyPatch,
     capsys: CaptureFixture[str],
 ) -> None:
+    from snowglobe import mcp_gateway
+
     canary = "INTERNAL_EXCEPTION_CANARY"
 
     def fail_validation(_arguments: object) -> bool:

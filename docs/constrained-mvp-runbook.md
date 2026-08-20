@@ -159,11 +159,11 @@ normally `http://127.0.0.1:5173/`; use the printed URL if that port changes. Do 
 start separate MCP and viewer-backend processes, bind either service to `0.0.0.0`, or
 place a proxy or tunnel in front of them.
 
-Configure the test MCP client with only the MCP endpoint. Connection profile, role,
-warehouse, database, authenticator, and key path are launcher-owned and must never be
-tool arguments. The [getting-started guide](getting-started.md) provides setup for Amp,
-Codex, Claude Code, and Continue.dev, plus the expected two-tool surface and a first
-prompt.
+Configure a native test MCP client with only the MCP endpoint, or install Snowglobe's
+native Pi package. Connection profile, role, warehouse, database, authenticator, and
+key path are launcher-owned and must never be tool, extension, or CLI arguments. The
+[getting-started guide](getting-started.md) provides setup for Amp, Codex, Claude Code,
+Continue.dev, and Pi, plus the expected control surface and a first prompt.
 
 ## 6. Submit, poll, and inspect
 
@@ -177,14 +177,20 @@ Submit through the `submit_read_query` MCP tool with arguments shaped exactly as
 }
 ```
 
+For Pi, install the package as documented in the
+[Pi integration guide](pi-integration.md), then call its native `submit_read_query`
+tool with the same fields. The extension passes SQL to the result-free CLI over stdin.
+Use the raw CLI only for adapter diagnosis.
+
 Replace the example relation with one exact `allowed_views` entry. Keep identifiers
 fully qualified. Do not put a result canary literal in SQL or `purpose`; the canary
 must originate in the approved view. Functions are not allowed in submitted MVP SQL.
 
-The accepted MCP response must contain only `status`, `request_id`, and `reason_code`.
-Poll `get_query_status` with only that `request_id`; each response must contain only
-`request_id` and `status`. Continue until a terminal state. Do not infer rows, counts,
-timing, or errors from the lifecycle state.
+The accepted MCP, Pi tool, or CLI response must contain only `status`, `request_id`,
+and `reason_code`. Poll `get_query_status` with only that `request_id`; for raw CLI
+diagnosis, run `uv run snowglobe status '<opaque-request-id>'`. Each response must
+contain only `request_id` and `status`. Continue until a terminal state. Do not infer
+rows, counts, timing, or errors from the lifecycle state.
 
 For a `complete` request, open the viewer, select the recent request or paste the same
 ID, and choose **Open result**. Confirm the expected non-sensitive values and column
@@ -257,9 +263,12 @@ grants, resource-monitor state, and warehouse usage:
 | Expiry | only `expired`; no result source; bounded Snowflake termination if still running |
 | Runtime restart | pending work bounded; old ID becomes `not_found`; nothing restored |
 
-For every case, check that MCP text and structured results contain the same closed
-fields. Result values and column names must be absent from all captured MCP traffic;
-submitted SQL must not be reflected in MCP responses. Result values, column names,
+For every native MCP case, check that text and structured results contain the same
+closed fields. For Pi, check that exactly two tools are registered and tool content is
+one closed receipt. For CLI and Pi subprocess cases, check that stdout is bounded to
+one closed JSON receipt and stderr contains no submitted or result data. Result values
+and column names must be absent from all captured MCP traffic, Pi tool results, and CLI
+output; submitted SQL must not be reflected in responses. Result values, column names,
 SQL, Snowflake identifiers, counts, sizes, timing, and errors must be absent from
 process output, ordinary logs, and URLs. In the browser's Application inspection,
 confirm Local Storage, Session Storage, IndexedDB, Cache Storage, and OPFS contain no

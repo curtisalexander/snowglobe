@@ -16,3 +16,5 @@ Snowglobe records consequential technical and security decisions as architecture
 | [0010](0010-minimum-snowflake-select-policy.md) | Accepted | Recursive Snowflake SELECT AST allowlist with approved views, no functions, and a server-owned overflow cap |
 | [0011](0011-bounded-snowflake-execution.md) | Accepted | Cursor-before-acceptance Snowflake execution with incremental admission and bounded in-memory result retention |
 | [0012](0012-svelte-viewer.md) | Accepted | Use plain Svelte for the local viewer UI |
+| [0013](0013-result-free-cli-adapter.md) | Accepted | Expose the closed control plane to shell-only agents through a CLI client of the local MCP service |
+| [0014](0014-pi-extension-package.md) | Accepted | Package two native Pi tools and a workflow skill over the result-free CLI |

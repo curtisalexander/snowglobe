@@ -43,6 +43,10 @@ timings, result sizes, query-history rows, screenshots, or usage values.
 
 - MCP text and structured content have equivalent closed fields: PASS / FAIL
 - Result canaries absent from MCP traffic: PASS / FAIL
+- CLI stdout is one closed receipt and stderr is sanitized: PASS / FAIL
+- Result canaries absent from CLI output: PASS / FAIL
+- Pi registers exactly two closed tools with one receipt in tool content: PASS / FAIL
+- Result canaries absent from Pi tool content and details: PASS / FAIL
 - SQL absent from MCP responses and ordinary output: PASS / FAIL
 - Result-derived data and Snowflake details absent from logs, errors, and URLs: PASS / FAIL
 - Result data absent from browser storage and service workers: PASS / FAIL

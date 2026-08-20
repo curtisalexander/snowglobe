@@ -4,13 +4,14 @@ from starlette.testclient import TestClient
 from snowglobe import local_server
 from snowglobe.local_server import create_app
 from snowglobe.mvp_limits import MVP_ARROW_LIMITS
-from snowglobe.runtime import broker
+from snowglobe.runtime import runtime
 
 
 def test_local_server_shares_one_broker_between_mcp_and_viewer_routes() -> None:
     app = create_app()
 
-    assert app.state.broker is broker
+    assert app.state.runtime is runtime
+    assert app.state.broker is runtime.broker
     assert app.state.admission_limits is MVP_ARROW_LIMITS
     response = TestClient(app).get("/v1/requests")
     assert response.status_code == 200

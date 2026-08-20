@@ -7,9 +7,13 @@
 - [Local threat model](threat-model.md) — loopback trust boundary, data flows, limitations, and required evidence.
 - [Snowflake configuration](configuration.md) — current `connections.toml` contract.
 - [Getting started](getting-started.md) — clone, Snowflake setup, preflight, launch,
-  Amp, Codex, Claude Code, Continue.dev, and the first result-free agent flow.
+  Amp, Codex, Claude Code, Continue.dev, Pi, and the first result-free agent flow.
 - [Developer guide](developer-guide.md) — implemented architecture, end-to-end call
   paths, module ownership, invariants, tests, and a practical code-review order.
+- [Result-free CLI decision](decisions/0013-result-free-cli-adapter.md) — how Pi and
+  other shell-only agents use the running MCP service without adding a data channel.
+- [Pi integration](pi-integration.md) — install and use Snowglobe's native Pi tools and
+  workflow skill.
 - [Constrained MVP runbook](constrained-mvp-runbook.md) — exact non-production setup,
   operation, lifecycle, shutdown, restart, and evidence procedure for Gate 5.
 - [Connected MVP evidence template](mvp-evidence-template.md) — value-free checklist

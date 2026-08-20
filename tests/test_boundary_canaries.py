@@ -2,17 +2,19 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
+from typing import Never
 
 import pyarrow as pa
 from mcp import Client
 from mcp.types import TextContent
-from pytest import CaptureFixture, LogCaptureFixture, MonkeyPatch
+from pytest import CaptureFixture, LogCaptureFixture
 from starlette.testclient import TestClient
 
-from snowglobe import mcp_gateway
 from snowglobe.arrow_stream import ArrowBatchSource
 from snowglobe.broker import InProcessBroker, RequestStatus
+from snowglobe.control import ControlPlane
 from snowglobe.executor import BackgroundQueryExecutor
+from snowglobe.mcp_gateway import create_server
 from snowglobe.mvp_limits import MVP_ARROW_LIMITS
 from snowglobe.result_api import ARROW_FRAME, FRAME_HEADER, STREAM_MAGIC, create_app
 
@@ -51,7 +53,6 @@ def _arrow_payload(body: bytes) -> bytes:
 
 
 def test_result_canaries_exist_only_in_the_viewer_data_path(
-    monkeypatch: MonkeyPatch,
     capsys: CaptureFixture[str],
     caplog: LogCaptureFixture,
 ) -> None:
@@ -75,15 +76,15 @@ def test_result_canaries_exist_only_in_the_viewer_data_path(
 
         return work
 
-    monkeypatch.setattr(mcp_gateway, "broker", broker)
-    monkeypatch.setattr(
-        mcp_gateway,
-        "submission_executor",
-        BackgroundQueryExecutor(broker=broker, admit=admit),
+    mcp_server = create_server(
+        ControlPlane(
+            broker=broker,
+            executor=BackgroundQueryExecutor(broker=broker, admit=admit),
+        )
     )
 
     async def exercise_mcp() -> tuple[str, str]:
-        async with Client(mcp_gateway.server) as client:
+        async with Client(mcp_server) as client:
             accepted = await client.call_tool(
                 "submit_read_query",
                 {
@@ -190,7 +191,7 @@ def test_empty_result_preserves_schema_without_a_value_channel() -> None:
     assert list(reader) == []
 
 
-def test_every_mcp_lifecycle_response_remains_schema_closed(monkeypatch: MonkeyPatch) -> None:
+def test_every_mcp_lifecycle_response_remains_schema_closed() -> None:
     now = datetime(2026, 8, 19, tzinfo=UTC)
 
     async def status_for(status: RequestStatus) -> None:
@@ -210,9 +211,9 @@ def test_every_mcp_lifecycle_response_remains_schema_closed(monkeypatch: MonkeyP
             elif status is RequestStatus.EXPIRED:
                 now += timedelta(minutes=5)
                 broker.get_request(request.request_id)
-        monkeypatch.setattr(mcp_gateway, "broker", broker)
+        mcp_server = create_server(ControlPlane(broker=broker, executor=None))
 
-        async with Client(mcp_gateway.server) as client:
+        async with Client(mcp_server) as client:
             result = await client.call_tool(
                 "get_query_status",
                 {"request_id": request.request_id},
@@ -231,12 +232,12 @@ def test_every_mcp_lifecycle_response_remains_schema_closed(monkeypatch: MonkeyP
             await status_for(status)
 
         class UnavailableBroker:
-            def get_request(self, _request_id: str) -> None:
+            def get_request(self, request_id: str) -> Never:
                 raise RuntimeError("STATUS_ERROR_CANARY")
 
-        monkeypatch.setattr(mcp_gateway, "broker", UnavailableBroker())
+        control = ControlPlane(broker=UnavailableBroker(), executor=None)
         request_id = "abcdefghijklmnopqrstuvwx"
-        async with Client(mcp_gateway.server) as client:
+        async with Client(create_server(control)) as client:
             unavailable = await client.call_tool(
                 "get_query_status",
                 {"request_id": request_id},

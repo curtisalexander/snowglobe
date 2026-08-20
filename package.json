@@ -2,17 +2,44 @@
   "name": "snowglobe",
   "version": "0.1.0",
   "private": true,
+  "description": "Governed Snowflake results for humans, outside AI agent context",
+  "license": "MIT",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "snowflake"
+  ],
   "workspaces": [
     "apps/viewer"
   ],
+  "pi": {
+    "extensions": [
+      "./integrations/pi/extensions/index.ts"
+    ],
+    "skills": [
+      "./integrations/pi/skills"
+    ]
+  },
   "scripts": {
     "build": "npm run build --workspace=@snowglobe/viewer",
     "dev": "npm run dev --workspace=@snowglobe/viewer",
     "lint": "npm run lint --workspace=@snowglobe/viewer",
-    "test": "npm run test --workspace=@snowglobe/viewer",
-    "typecheck": "npm run typecheck --workspace=@snowglobe/viewer"
+    "test": "npm run test --workspace=@snowglobe/viewer && npm run test:pi",
+    "test:pi": "tsx --test integrations/pi/extensions/*.test.ts",
+    "typecheck": "npm run typecheck --workspace=@snowglobe/viewer && tsc --noEmit -p integrations/pi/tsconfig.json"
   },
   "engines": {
     "node": ">=22.12"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.84.2",
+    "@types/node": "22.20.0",
+    "tsx": "4.20.6",
+    "typebox": "1.3.16",
+    "typescript": "5.9.3"
   }
 }

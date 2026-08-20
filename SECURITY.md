@@ -11,11 +11,13 @@ account system, tenant model, or sharing feature.
 
 ## Security property
 
-Snowglobe creates no result-bearing MCP channel. Its MCP surface may return an opaque
-request ID, fixed submission reason, and coarse lifecycle state. It must not return
-rows, schema, names, counts, sizes, timings, Snowflake identifiers, database errors,
-result locations, or result-derived artifacts. Admitted result bytes travel through
-the local viewer backend into the browser worker.
+Snowglobe creates no result-bearing model-facing control channel. Its MCP surface and
+result-free CLI, including the native Pi tools layered over that CLI, may return an
+opaque request ID, fixed submission reason, and coarse lifecycle state. They must not
+return rows, schema, names, counts, sizes, timings, Snowflake identifiers, database
+errors, result locations, or result-derived artifacts. The CLI and Pi extension call
+the already-running loopback MCP endpoint rather than creating a second runtime.
+Admitted result bytes travel through the local viewer backend into the browser worker.
 
 Loopback binding reduces accidental remote exposure, but it is not authentication or
 same-host isolation. Software running as the analyst—including a powerful coding-agent
@@ -65,6 +67,9 @@ is documented, contact the project owner privately before sharing details.
 Threat-model and canary review is required for changes to:
 
 - MCP capabilities, schemas, results, transport, status, or errors;
+- CLI commands, stdout, stderr, exit behavior, MCP client transport, or public errors;
+- Pi package manifests, extension tools, schemas, subprocess handling, tool content,
+  tool details, skill instructions, or public errors;
 - local network binding, CORS, proxying, or deployment shape;
 - SQL parsing, policy, rewriting, roles, warehouses, or query execution;
 - Snowflake credentials, query tags, identifiers, or result retrieval;
@@ -73,9 +78,17 @@ Threat-model and canary review is required for changes to:
 - browser caching, persistence, external access, rendering, export, or worker lifecycle.
 
 MCP changes must verify exact capabilities and closed schemas, equivalent text and
-structured content, malformed and unknown calls, and canary absence. Keep the explicit
-low-level handlers; do not replace them with high-level decorators or a third-party
-Snowflake MCP without a superseding architecture decision.
+structured content, malformed and unknown calls, and canary absence. CLI changes must
+verify exact receipt-only stdout, sanitized stderr, stdin SQL handling, transport
+failure, malformed response handling, and canary absence. Keep the explicit low-level
+handlers; do not replace them with high-level decorators or a third-party Snowflake MCP
+without a superseding architecture decision.
+
+Pi integration changes must additionally verify exact two-tool registration, closed
+parameter schemas, stdin-only SQL, no shell invocation, bounded/discarded process
+output, independent receipt validation, fixed failure mapping, and canary absence. Pi
+extensions run with the analyst's full local permissions; the package and skill do not
+turn loopback into an isolation boundary.
 
 See [PLAN.md](PLAN.md), the [connected-MVP runbook](docs/constrained-mvp-runbook.md),
 the [threat model](docs/threat-model.md), and

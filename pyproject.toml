@@ -17,6 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
+snowglobe = "snowglobe.cli:main"
 snowglobe-local = "snowglobe.local_server:main"
 snowglobe-preflight = "snowglobe.preflight:main"
 

@@ -15,12 +15,13 @@ for the architecture, end-to-end call paths, file ownership, invariants, and sug
 code-review order.
 
 Snowglobe lets a coding agent submit governed read-only SQL without putting the query
-result into the MCP response. Submission will run asynchronously and return an opaque
-request ID. The agent may poll that ID for a small lifecycle state, while the analyst
-uses the same ID in a local viewer to inspect the result.
+result into a model-facing response. Agents may use MCP directly or, when they do not
+support MCP, call the result-free `snowglobe` CLI. Submission runs asynchronously and
+returns an opaque request ID. The agent may poll that ID for a small lifecycle state,
+while the analyst uses the same ID in a local viewer to inspect the result.
 
 ```text
-                         MCP — control only
+                    MCP or CLI — control only
 ┌──────────────┐     ┌────────────────────────┐     ┌───────────┐
 │ Analyst's    │────▶│ local Snowglobe runtime│────▶│ Snowflake │
 │ coding agent │◀────│ submit + status        │     │           │
@@ -52,6 +53,9 @@ Implemented pieces include:
 
 - explicit low-level MCP contracts for `submit_read_query` and
   `get_query_status`;
+- a transport-neutral control plane and result-free CLI for Pi and other shell-only
+  agents;
+- an installable Pi package with two native typed tools and a workflow skill;
 - a single-analyst broker with pending, complete, failed, cancelled, and expired
   lifecycle states;
 - a configured background Snowflake executor that registers a request-scoped cursor
@@ -77,22 +81,22 @@ now exist. `SECURITY.md` authorizes only that constrained connected test.
 
 ## Boundary
 
-MCP may return only:
+MCP and the result-free CLI may return only:
 
 - an accepted/rejected submission receipt with an opaque request ID and fixed reason;
   or
 - an opaque request ID plus `pending`, `complete`, `failed`, `cancelled`, `expired`,
   `not_found`, or `service_unavailable`.
 
-MCP must not return rows, schema, column names, counts, sizes, timing, Snowflake query
-IDs, database errors, result URLs, or result-derived artifacts. Result bytes travel
-only through the local viewer backend into the browser worker.
+Neither adapter may return rows, schema, column names, counts, sizes, timing, Snowflake
+query IDs, database errors, result URLs, or result-derived artifacts. Result bytes
+travel only through the local viewer backend into the browser worker.
 
 Loopback is not authentication or process isolation. A coding agent with arbitrary
 same-host HTTP, browser, shell, or process access may be able to call the local viewer
-backend or capture rendered data. Snowglobe prevents an automatic result-bearing MCP
-channel; it does not claim to defend the analyst's data from other processes running as
-that analyst.
+backend or capture rendered data. Snowglobe prevents an automatic result-bearing
+control channel; it does not claim to defend the analyst's data from other processes
+running as that analyst.
 
 ## Local development
 
@@ -126,6 +130,32 @@ npm run dev
 The MCP endpoint is `http://127.0.0.1:8000/mcp`. Do not launch the MCP and viewer
 backend as separate processes while the broker is in memory, and do not bind either
 service to `0.0.0.0`.
+
+Agents without MCP support can call that same running service through the CLI. SQL is
+read from standard input and stdout contains exactly one closed JSON receipt:
+
+```bash
+uv run snowglobe submit \
+  --purpose "Constrained Snowglobe MVP canary check" \
+  --ttl 300 <<'SQL'
+SELECT * FROM TEST_DATABASE.TEST_SCHEMA.APPROVED_VIEW
+SQL
+
+uv run snowglobe status '<opaque-request-id>'
+```
+
+The CLI does not run a second executor and has no result-reading command. It requires
+`snowglobe-local` to remain running because the daemon owns the in-memory request and
+result state.
+
+For native Pi tools instead of shell commands, install the reviewed package:
+
+```bash
+pi install git:github.com/curtisalexander/snowglobe
+```
+
+See the [Pi integration guide](docs/pi-integration.md) for global and project-local
+installation, verification, usage, security behavior, updates, and removal.
 
 The check script runs:
 

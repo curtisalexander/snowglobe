@@ -146,11 +146,11 @@ The MCP endpoint is `http://127.0.0.1:8000/mcp`. Vite prints the viewer URL, nor
 machine. Do not use VS Code Remote SSH, a dev container, a proxy, a tunnel, port
 forwarding, or a non-loopback bind for the connected MVP.
 
-## 6. Configure one MCP client
+## 6. Configure one control adapter
 
-Choose one client below. The MCP configuration contains only Snowglobe's loopback URL;
-it contains no Snowflake credential or connection setting. Restart or reload the
-client after configuring it.
+Choose one native MCP client below, or install the native Pi package. MCP configuration
+contains only Snowglobe's loopback URL; it contains no Snowflake credential or
+connection setting. Restart or reload a native client after configuring it.
 
 ### Amp
 
@@ -234,9 +234,43 @@ Do not configure the same file as both YAML and JSON, and do not use the depreca
 SSE transport. Run the Continue extension and Snowglobe directly on the same local
 machine rather than through a remote VS Code extension host.
 
-## 7. Verify the MCP surface
+### Pi
 
-Whichever client you use, Snowglobe must advertise exactly:
+Pi does not support MCP, so Snowglobe provides a native Pi package. Install it directly
+from the reviewed repository:
+
+```bash
+pi install git:github.com/curtisalexander/snowglobe
+pi list
+```
+
+Restart Pi and confirm `submit_read_query` and `get_query_status` are available. The
+package registers typed tools that invoke Snowglobe's fixed-loopback, result-free CLI;
+it also bundles workflow guidance that Pi discovers as the `snowglobe` skill. The
+runtime must remain running. See the [complete Pi integration guide](pi-integration.md)
+for project-local installation, updates, removal, troubleshooting, and security detail.
+
+### Another shell-only agent, or Pi adapter debugging
+
+Use the result-free CLI directly when an agent cannot load a native extension or when
+debugging the Pi adapter. Keep `snowglobe-local` running, then pipe SQL through stdin:
+
+```bash
+printf '%s\n' 'SELECT * FROM YOUR_TEST_DATABASE.YOUR_TEST_SCHEMA.YOUR_APPROVED_VIEW' \
+  | uv run snowglobe submit \
+      --purpose "Constrained Snowglobe MVP canary check" \
+      --ttl 300
+```
+
+Retain only the returned opaque ID and run
+`uv run snowglobe status '<opaque-request-id>'` to poll it. The CLI deliberately has no
+result, viewer, configuration, or cancellation commands. SQL is stdin-only so it is not
+a `snowglobe` process argument. Do not have an agent call the `/v1` viewer routes,
+inspect the browser, or use shell HTTP clients to read the result stream.
+
+## 7. Verify the control surface
+
+Native MCP clients must see exactly:
 
 - `submit_read_query(sql, purpose, requested_ttl)`
 - `get_query_status(request_id)`
@@ -244,6 +278,13 @@ Whichever client you use, Snowglobe must advertise exactly:
 It must not advertise Snowglobe resources, prompts, result readers, cancellation
 tools, or connection-setting inputs. If the runtime was started without `--config`, a
 submission correctly returns `SERVICE_UNAVAILABLE`.
+
+The Pi extension must register exactly the same two tools, with closed input schemas,
+and return only compact JSON text matching the receipt contracts. The CLI must expose
+only `submit` and `status`. Successful invocation writes exactly one `QueryReceipt` or
+`QueryStatusReceipt` JSON object to stdout. Neither adapter may emit result data,
+schema, counts, Snowflake errors, identifiers, or result URLs. Malformed results and
+invocations become closed receipts without reflecting their input.
 
 ## 8. Run the first agent experiment
 

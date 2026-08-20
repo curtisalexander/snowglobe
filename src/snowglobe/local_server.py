@@ -9,18 +9,18 @@ from pathlib import Path
 import uvicorn
 from starlette.applications import Starlette
 
-from snowglobe import mcp_gateway
+from snowglobe.mcp_gateway import create_server
 from snowglobe.mvp_limits import MVP_ARROW_LIMITS
 from snowglobe.result_api import create_app as create_result_api
-from snowglobe.runtime import broker
-from snowglobe.snowflake_executor import create_snowflake_executor
+from snowglobe.runtime import Runtime, create_runtime
+from snowglobe.runtime import runtime as default_runtime
 
 
-def create_app():
+def create_app(runtime: Runtime = default_runtime):
     """Serve MCP and viewer routes from the runtime that owns the local broker."""
 
-    result_api = create_result_api(broker=broker, admission_limits=MVP_ARROW_LIMITS)
-    application = mcp_gateway.server.streamable_http_app(
+    result_api = create_result_api(broker=runtime.broker, admission_limits=MVP_ARROW_LIMITS)
+    application = create_server(runtime.control).streamable_http_app(
         stateless_http=True,
         json_response=True,
         debug=False,
@@ -36,11 +36,10 @@ def create_app():
             try:
                 yield
             finally:
-                executor = mcp_gateway.submission_executor
-                if executor is not None:
-                    await executor.close()
+                await runtime.close()
 
     application.router.lifespan_context = lifespan
+    application.state.runtime = runtime
     return application
 
 
@@ -59,16 +58,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--profile", default="default")
     arguments = parser.parse_args(argv)
 
-    if arguments.config is not None:
+    if arguments.config is None:
+        application = app
+    else:
         try:
-            mcp_gateway.submission_executor = create_snowflake_executor(
-                broker=broker,
+            runtime = create_runtime(
                 config_path=arguments.config,
                 profile_name=arguments.profile,
             )
+            application = create_app(runtime)
         except Exception:
             print("Snowglobe startup failed.", file=sys.stderr)
             return 1
 
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(application, host="127.0.0.1", port=8000)
     return 0

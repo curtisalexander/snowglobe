@@ -12,13 +12,15 @@ architecture proposal. Use it alongside:
 ## 1. The system in one page
 
 Snowglobe lets an agent submit one tightly governed Snowflake read query while keeping
-result-derived data out of MCP. MCP is the control plane: it returns an opaque request
-ID and coarse lifecycle states. The local viewer is the data plane: it streams a
-complete admitted Arrow result into an in-memory DuckDB-Wasm instance in a dedicated
-browser worker.
+result-derived data out of model-facing control channels. A transport-neutral control
+plane returns an opaque request ID and coarse lifecycle states through either MCP or a
+result-free CLI client. Pi uses native typed tools that wrap that CLI and independently
+validate its receipts. The local viewer is the data plane: it streams a complete
+admitted Arrow result into an in-memory DuckDB-Wasm instance in a dedicated browser
+worker.
 
 ```text
-                         MCP control plane
+                       MCP or CLI control
 ┌──────────────┐     ┌─────────────────────────┐     ┌───────────┐
 │ Coding agent │────▶│ Local Snowglobe runtime │────▶│ Snowflake │
 │              │◀────│ submit + status only    │     │           │
@@ -71,6 +73,9 @@ boundary. The implementation assumes all of the following:
 - MCP never returns rows, schema, column names, counts, sizes, timings, Snowflake IDs,
   driver errors, result locations, or result artifacts.
 - MCP text content and structured content encode the same closed receipt.
+- CLI stdout contains exactly the same closed receipt models and never result data.
+- Pi registers exactly those two tools, independently validates CLI receipts, and
+  returns only compact receipt JSON with empty tool details.
 - Profile, role, warehouse, database, authenticator, key path, and allowlisted views
   come only from local launcher configuration, never tool input.
 - SQL authorization is a recursive SQLGlot AST allowlist, not parsing alone and not a
@@ -94,13 +99,14 @@ The accepted decisions behind these rules are primarily
 snowglobe/
 ├── src/snowglobe/          Python runtime, policy, execution, broker, HTTP
 ├── apps/viewer/src/        Svelte UI, stream parser, worker, DuckDB-Wasm
+├── integrations/pi/        Native Pi tools, process boundary, workflow skill
 ├── tests/                  Backend and cross-boundary pytest suite
 ├── docs/decisions/         Accepted architecture decisions
 ├── docs/                   Runbooks, threat model, and implementation guides
 ├── scripts/setup.sh        Locked developer installation
 ├── scripts/check.sh        Complete connection-free verification
 ├── pyproject.toml          Python package, entry points, and tool configuration
-└── package.json            Viewer workspace commands
+└── package.json            Viewer commands and Pi package manifest
 ```
 
 ### Developer setup and daily loop
@@ -137,8 +143,10 @@ preflight, launch, client, prompt, and shutdown procedure in the
 | File | Owns |
 |---|---|
 | [`local_server.py`](../src/snowglobe/local_server.py) | Supported loopback launcher, route composition, executor shutdown |
-| [`runtime.py`](../src/snowglobe/runtime.py) | The one process-global MVP broker |
-| [`mcp_gateway.py`](../src/snowglobe/mcp_gateway.py) | Exact model-facing tool schemas, dispatch, and sanitized receipts |
+| [`runtime.py`](../src/snowglobe/runtime.py) | Explicit process-local broker, executor, and control-plane composition |
+| [`control.py`](../src/snowglobe/control.py) | Transport-neutral submission, status lookup, and fixed receipt mapping |
+| [`mcp_gateway.py`](../src/snowglobe/mcp_gateway.py) | Exact MCP schemas, argument validation, framing, and receipt serialization |
+| [`cli.py`](../src/snowglobe/cli.py) | Result-free shell adapter over the running loopback MCP service |
 | [`contracts.py`](../src/snowglobe/contracts.py) | Closed Pydantic receipt and lifecycle types |
 | [`configuration.py`](../src/snowglobe/configuration.py) | Exact TOML profile schema and connector argument allowlist |
 | [`secure_file.py`](../src/snowglobe/secure_file.py) | Owner-only, no-final-symlink file reads |
@@ -152,6 +160,16 @@ preflight, launch, client, prompt, and shutdown procedure in the
 | [`result_api.py`](../src/snowglobe/result_api.py) | Viewer metadata, cancellation, and failure-atomic framed streaming routes |
 | [`mvp_limits.py`](../src/snowglobe/mvp_limits.py) | Shared backend MVP budgets |
 | [`preflight.py`](../src/snowglobe/preflight.py) | Value-free local and connected profile checks |
+
+### Pi package ownership
+
+| File | Owns |
+|---|---|
+| [`package.json`](../package.json) | Pi package discovery manifest and integration checks |
+| [`index.ts`](../integrations/pi/extensions/index.ts) | Exact native tool definitions and closed tool results |
+| [`contracts.ts`](../integrations/pi/extensions/contracts.ts) | Independent exact JSON receipt validation and fixed failures |
+| [`process.ts`](../integrations/pi/extensions/process.ts) | No-shell subprocess, stdin SQL, cancellation, timeout, and bounded output |
+| [`SKILL.md`](../integrations/pi/skills/snowglobe/SKILL.md) | Progressive-disclosure workflow guidance, not enforcement |
 
 ### Viewer ownership
 
@@ -174,6 +192,7 @@ The executable entry points are declared in [`pyproject.toml`](../pyproject.toml
 
 ```toml
 [project.scripts]
+snowglobe = "snowglobe.cli:main"
 snowglobe-local = "snowglobe.local_server:main"
 snowglobe-preflight = "snowglobe.preflight:main"
 ```
@@ -183,26 +202,30 @@ snowglobe-preflight = "snowglobe.preflight:main"
 ```text
 local_server.main
 ├── parse --config and --profile
-├── if --config is present
-│   └── create_snowflake_executor
+├── create_runtime
+│   ├── create one InProcessBroker
+│   ├── if --config is present, create_snowflake_executor
 │       ├── load_profile
 │       ├── construct SnowflakeSqlPolicy
 │       ├── build_connector_arguments
 │       └── construct BackgroundQueryExecutor
-├── compose MCP and viewer routes around runtime.broker
+│   └── construct ControlPlane(broker, executor)
+├── create_server(runtime.control)
+├── compose MCP and viewer routes around the same runtime
 └── uvicorn.run(host="127.0.0.1", port=8000)
 ```
 
-[`runtime.py`](../src/snowglobe/runtime.py) creates the single broker with a five-minute
-maximum TTL and one-pending-request capacity. [`local_server.create_app()`](../src/snowglobe/local_server.py)
-prepends the viewer routes to the low-level MCP Streamable HTTP app, so both route sets
-refer to that exact broker object. On application shutdown, its lifespan calls
-`BackgroundQueryExecutor.close()`, which cancels pending requests and waits for worker
+[`runtime.create_runtime()`](../src/snowglobe/runtime.py) creates the single broker with
+a five-minute maximum TTL and one-pending-request capacity, the optional configured
+executor, and their shared `ControlPlane`. [`local_server.create_app()`](../src/snowglobe/local_server.py)
+prepends the viewer routes to an MCP server constructed around that control plane, so
+both route sets refer to the runtime's exact broker object. On application shutdown,
+its lifespan closes the runtime, which cancels pending requests and waits for worker
 tasks to finish connector cleanup.
 
-Starting without `--config` deliberately leaves `mcp_gateway.submission_executor` as
-`None`; submission then returns `SERVICE_UNAVAILABLE`. This is the fail-closed
-development mode, not a partially configured executor.
+Starting without `--config` constructs the control plane with no executor; submission
+then returns `SERVICE_UNAVAILABLE`. This is the fail-closed development mode, not a
+partially configured executor.
 
 ## 5. Configuration and credential path
 
@@ -232,11 +255,16 @@ argument path as runtime startup. Without `--connect`, it never calls Snowflake.
 `--connect`, it opens and closes one cursor without executing SQL. Both success and
 failure output are fixed, value-free strings.
 
-## 6. MCP control-plane contracts
+## 6. Control-plane adapters and contracts
+
+[`control.py`](../src/snowglobe/control.py) owns transport-neutral submission, lifecycle
+lookup, and conversion of policy or internal failures to closed Pydantic receipts. It
+does not know about MCP framing, CLI parsing, or viewer routes.
 
 [`mcp_gateway.py`](../src/snowglobe/mcp_gateway.py) uses the low-level
 `mcp.server.Server` API. It explicitly defines tools, schemas, dispatch, text content,
-structured content, and public failures.
+structured content, and public failures. `create_server(control)` binds each MCP server
+instance to explicit dependencies rather than mutable module globals.
 
 Submission input is exactly:
 
@@ -266,6 +294,27 @@ logged, sent to Snowflake, or returned.
 Every public exception boundary maps details to a fixed receipt. Invalid status input
 gets a fresh opaque ID plus `not_found`, rather than reflecting malformed input.
 Unknown tool names receive the fixed text `Tool unavailable.`
+
+[`cli.py`](../src/snowglobe/cli.py) lets Pi and other shell-only agents reach the same
+running MCP server. `snowglobe submit` reads SQL from stdin; `snowglobe status` accepts
+only an opaque request ID. The CLI validates MCP structured content back into the
+closed receipt models before printing one compact JSON object. A transport failure or
+malformed response becomes a fixed service-unavailable receipt. The CLI never creates
+its own runtime and exposes no viewer or result command.
+
+[`integrations/pi/extensions/index.ts`](../integrations/pi/extensions/index.ts) is the
+preferred Pi adapter. It registers exactly the same two names and input shapes as
+native typed Pi tools, invokes the package-local CLI with `uv run --project ...
+--frozen`, and returns compact JSON text with empty details. The process wrapper uses
+an argument array rather than a shell, pipes SQL through stdin, discards stderr, bounds
+stdout, and honors cancellation and fixed timeouts. The extension then validates the
+CLI result independently against exact TypeScript receipt contracts. Any process or
+validation failure becomes a fixed closed receipt.
+
+The bundled [`snowglobe` skill](../integrations/pi/skills/snowglobe/SKILL.md) tells Pi
+when and how to use the tools and directs result inspection back to the analyst. It
+does not provide the capability or enforce isolation. See [ADR 0014](decisions/0014-pi-extension-package.md)
+and the [Pi integration guide](pi-integration.md).
 
 ## 7. SQL authorization and rewriting
 
@@ -320,8 +369,9 @@ review, not a compatibility chore.
 The central call path is:
 
 ```text
-mcp_gateway.call_tool("submit_read_query")
-└── BackgroundQueryExecutor.submit
+MCP or CLI adapter
+└── ControlPlane.submit
+    └── BackgroundQueryExecutor.submit
     ├── SnowflakeQueryAdmission.__call__
     │   └── policy.authorize(sql)                 synchronous rejection point
     ├── broker.submit(...)                        creates PENDING record
@@ -553,6 +603,7 @@ The tests are organized around boundaries rather than only functions:
 | What to review | Best evidence |
 |---|---|
 | Exact MCP capabilities, schemas, parity, sanitization, HTTP round trip | [`test_mcp_gateway.py`](../tests/test_mcp_gateway.py) |
+| Pi tool registration, receipt validation, stdin, process bounds, failures | [`integrations/pi/extensions`](../integrations/pi/extensions) |
 | Lifecycle races, cursor identity, cancellation, expiry, capacity | [`test_broker.py`](../tests/test_broker.py) |
 | Acceptance ordering and generic background cleanup | [`test_executor.py`](../tests/test_executor.py) |
 | Hostile SQL and generated-SQL round trip | [`test_sql_policy.py`](../tests/test_sql_policy.py) |
@@ -580,6 +631,7 @@ uv run pytest tests/test_snowflake_executor.py tests/test_arrow_stream.py
 uv run pytest tests/test_mcp_gateway.py tests/test_boundary_canaries.py
 npm test -- src/result-stream.test.ts
 npm test -- src/worker.test.ts
+npm run test:pi
 ```
 
 ## 16. A practical code-review order
@@ -592,17 +644,21 @@ To rebuild context quickly, review in this order:
 2. [SECURITY.md](../SECURITY.md)
 3. [PLAN.md](../PLAN.md), especially the MVP target and deferred work
 4. [ADR 0008](decisions/0008-single-analyst-loopback-runtime.md) through
-   [ADR 0012](decisions/0012-svelte-viewer.md)
+   [ADR 0014](decisions/0014-pi-extension-package.md)
 
-You should finish this pass able to state what MCP may disclose and why the viewer is
-not an authentication boundary.
+You should finish this pass able to state what MCP, CLI, and Pi tool output may
+disclose and why the viewer is not an authentication boundary.
 
 ### Pass 2: model-facing surface
 
 1. [`contracts.py`](../src/snowglobe/contracts.py)
-2. [`mcp_gateway.py`](../src/snowglobe/mcp_gateway.py)
-3. [`test_mcp_gateway.py`](../tests/test_mcp_gateway.py)
-4. [`test_boundary_canaries.py`](../tests/test_boundary_canaries.py)
+2. [`control.py`](../src/snowglobe/control.py)
+3. [`mcp_gateway.py`](../src/snowglobe/mcp_gateway.py)
+4. [`cli.py`](../src/snowglobe/cli.py)
+5. [`integrations/pi/extensions`](../integrations/pi/extensions)
+6. [`test_mcp_gateway.py`](../tests/test_mcp_gateway.py)
+7. [`test_cli.py`](../tests/test_cli.py)
+8. [`test_boundary_canaries.py`](../tests/test_boundary_canaries.py)
 
 Check exact fields, text/structured equivalence, malformed calls, and exception
 sanitization before reading implementation internals.
@@ -647,6 +703,7 @@ Use this as a map, not a substitute for threat modeling:
 | If changing… | Review together… | Minimum focused checks |
 |---|---|---|
 | MCP fields, tools, status, or errors | contracts, gateway, PLAN model-visible contracts | MCP gateway + boundary canaries + real Streamable HTTP round trip |
+| Pi tools, process handling, or package API | CLI, Pi contracts, extension, skill, ADR 0014 | Pi typecheck + Pi tests + package-load smoke test |
 | SQL grammar or SQLGlot version | policy, ADR 0010, allowed views, row-cap semantics | full hostile SQL corpus + generated round trip |
 | Connector settings or lifecycle | configuration, Snowflake context manager, executor, ADRs 0009/0011 | configuration + Snowflake + executor tests |
 | Cancellation, expiry, concurrency | broker and generic executor | broker race tests + Snowflake cancellation tests |

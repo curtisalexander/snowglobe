@@ -2,7 +2,7 @@
 
 **Status:** Implementation is ready for external connected-MVP validation; Gate 5 connected evidence is next
 **Last updated:** August 19, 2026
-**Current decision:** [ADR 0011](docs/decisions/0011-bounded-snowflake-execution.md)
+**Current decision:** [ADR 0014](docs/decisions/0014-pi-extension-package.md)
 **Retained source proposal:** [architecture-proposal.md](docs/architecture-proposal.md)
 
 ## 1. Outcome
@@ -10,7 +10,8 @@
 Build a local tool for one Snowflake analyst:
 
 1. the analyst asks a coding agent to draft and submit one governed read query;
-2. Snowglobe starts it asynchronously and MCP returns an opaque request ID;
+2. Snowglobe starts it asynchronously and MCP or the result-free CLI returns an opaque
+   request ID;
 3. the agent may poll that ID for a coarse lifecycle state only;
 4. the analyst opens the local viewer and selects or pastes the same ID;
 5. the viewer backend streams a complete, admitted Arrow result;
@@ -22,7 +23,7 @@ result service, tenant platform, or enterprise identity product.
 
 ## 2. Product boundary
 
-### MCP may disclose
+### Model-facing control adapters may disclose
 
 - submission `status`: `accepted` or `rejected`;
 - one random opaque `request_id`;
@@ -30,7 +31,7 @@ result service, tenant platform, or enterprise identity product.
 - lifecycle `status`: `pending`, `complete`, `failed`, `cancelled`, `expired`,
   `not_found`, or `service_unavailable`.
 
-### MCP must not disclose
+### Model-facing control adapters must not disclose
 
 - rows, values, schema, column names, or types;
 - row counts, result sizes, whether rows exist, or progress percentages;
@@ -39,17 +40,18 @@ result service, tenant platform, or enterprise identity product.
 - SQL, database/parser/driver errors, or policy details beyond fixed reasons; or
 - images, charts, resources, downloads, or other result-derived artifacts.
 
-Result bytes travel only from the local viewer backend to the browser worker. The
-viewer backend is the former “Result API”; in this design it is simply a set of local
-routes in the same process as MCP and the broker.
+Result bytes travel only from the local viewer backend to the browser worker. The CLI
+is a client of the existing loopback MCP endpoint, not a second runtime. The viewer
+backend is the former “Result API”; in this design it is simply a set of local routes
+in the same process as MCP and the broker.
 
 ### Explicit limitation
 
 Loopback binding is not viewer authentication or same-host process isolation. A coding
 agent with arbitrary local HTTP, browser, shell, screenshot, accessibility, or process
 access may be able to read the viewer. The guarantee is that Snowglobe creates no
-automatic result-bearing MCP response—not that it protects data from software running
-as the analyst.
+automatic result-bearing MCP or CLI response—not that it protects data from software
+running as the analyst.
 
 ## 3. Accepted architecture
 
@@ -59,6 +61,8 @@ as the analyst.
 | Service exposure | Loopback only; supported launcher binds `127.0.0.1` |
 | Runtime | One process owns MCP routes, viewer routes, and broker |
 | MCP tools | `submit_read_query` and `get_query_status` |
+| Shell-only agents | `snowglobe submit` and `snowglobe status`, returning the same closed receipts through the running MCP service |
+| Pi | Installable package registers the same two native typed tools and a workflow skill over the result-free CLI |
 | Correlation | Random 20–32 character request ID; not a Snowflake ID or secret |
 | Async lifecycle | Pending record before execution; terminal complete/failed/cancelled/expired state |
 | Viewer discovery | List recent local requests or paste the MCP request ID |
@@ -116,9 +120,10 @@ Rules:
 The next release target is a **test-environment MVP**, not a feature-complete analyst
 application. It proves one real path:
 
-> Submit one governed read query through MCP, poll an opaque ID, execute it with a
-> fixed least-privileged Snowflake profile, and inspect a bounded result in the local
-> viewer without result-derived information crossing the MCP boundary.
+> Submit one governed read query through MCP or the result-free CLI, poll an opaque ID,
+> execute it with a fixed least-privileged Snowflake profile, and inspect a bounded
+> result in the local viewer without result-derived information crossing a model-facing
+> control boundary.
 
 The existing 50-row/256-KiB bounded viewport is sufficient for this MVP because the
 MVP admission budgets must not permit a result larger than that viewer can inspect.
@@ -157,6 +162,10 @@ environment and in the order below.
 - [x] Implement the closed submission and lifecycle contracts, opaque IDs, local
   broker, and atomic synthetic background-executor seam.
 - [x] Implement the shared loopback-only MCP/viewer launcher.
+- [x] Extract a transport-neutral control plane and add a result-free CLI adapter for
+  shell-only agents without creating a second runtime.
+- [x] Package the CLI as two native Pi tools plus a progressive-disclosure workflow
+  skill, with independent receipt validation and fail-closed subprocess handling.
 - [x] Implement request-scoped connection/cursor ownership and idempotent cancellation.
 - [x] Implement incremental Arrow admission, failure-atomic framing, provisional
   DuckDB-Wasm ingestion, and a bounded escaped viewport.
@@ -326,7 +335,10 @@ channels remain result-free.
 
 | Layer | MVP evidence |
 |---|---|
+| Control plane | accepted, rejected, unavailable, and lifecycle mappings remain schema-closed and result-free |
 | MCP | exact two-tool capabilities, schema closure, text/structured parity, malformed/unknown-call sanitization, canary absence |
+| CLI | stdin submission, exact JSON receipts, fixed loopback MCP transport, sanitized malformed input/transport failure, canary absence |
+| Pi | exact two-tool registration, closed schemas, package discovery, stdin-only SQL, bounded process output, independent receipt validation, canary absence |
 | Lifecycle | pending and every terminal state; unknown IDs; expiry; race-safe idempotent cancellation |
 | Config/key | strict TOML shape, profile selection, safe permissions, PEM/DER conversion, secret-safe failures |
 | SQL policy | allowlisted reads plus comments, quoting, nested CTEs, multiple statements, stages, dangerous functions, and dialect round trips |
@@ -342,7 +354,8 @@ channels remain result-free.
 - viewer authentication, OIDC, accounts, tenants, cross-user authorization, or sharing;
 - hosted or remotely exposed MCP/viewer services;
 - letting the model read or summarize result rows;
-- returning schema, counts, previews, errors, Snowflake IDs, or links through MCP;
+- returning schema, counts, previews, errors, Snowflake IDs, or links through MCP or
+  the CLI;
 - general Snowflake administration, mutation, procedures, stages, or file transfer;
 - a generic SQL IDE, notebook, or BI replacement;
 - durable browser datasets, offline use, automatic restoration, or third-party telemetry;
@@ -355,12 +368,12 @@ The connected MVP is done when evidence supports this statement in the constrain
 Snowflake test environment:
 
 > One analyst can submit a governed Snowflake read query asynchronously, receive and
-> poll an opaque request ID through MCP, and use that ID to inspect the complete result
-> in a loopback-only local viewer. The SQL policy and least-privileged role prevent
-> mutation and unintended object access. MCP emits only its closed receipt and
-> lifecycle contracts; result values, schema, sizes, Snowflake identifiers, and errors
-> remain out of MCP and ordinary logs. Result ingestion and browser analysis remain
-> bounded and ephemeral.
+> poll an opaque request ID through MCP or the result-free CLI, and use that ID to
+> inspect the complete result in a loopback-only local viewer. The SQL policy and
+> least-privileged role prevent mutation and unintended object access. Both adapters
+> emit only the closed receipt and lifecycle contracts; result values, schema, sizes,
+> Snowflake identifiers, and errors remain out of model-facing control output and
+> ordinary logs. Result ingestion and browser analysis remain bounded and ephemeral.
 
 This definition does not require durable requests, advanced table navigation, charts,
 virtualization, export, or polished packaging.

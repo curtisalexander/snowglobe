@@ -7,18 +7,19 @@
 
 One analyst runs Snowglobe and a coding agent on one machine. The analyst's configured
 Snowflake identity determines warehouse access. The coding agent supplies SQL through
-MCP; the analyst reviews completed results in the local viewer.
+MCP, the result-free CLI, or the native Pi tools layered over that CLI; the analyst
+reviews completed results in the local viewer.
 
-The claim is narrow: Snowglobe's MCP output contains only the closed submission and
-lifecycle contracts in `PLAN.md`. Query-result bytes and rich metadata do not travel
-through MCP. The local viewer backend is a separate application path, but it is not
-protected from other processes running as the analyst.
+The claim is narrow: Snowglobe's MCP, CLI, and Pi tool output contain only the closed
+submission and lifecycle contracts in `PLAN.md`. Query-result bytes and rich metadata
+do not travel through these adapters. The local viewer backend is a separate
+application path, but it is not protected from other processes running as the analyst.
 
 ## Components and allowed data
 
 | Component | Data allowed | Main controls |
 |---|---|---|
-| Coding agent and MCP client | Submitted SQL, purpose, TTL, opaque request ID, fixed reason, coarse lifecycle | Closed schemas, sanitized exceptions, no MCP resources/prompts/result reader |
+| Coding agent and MCP/CLI/Pi adapter | Submitted SQL, purpose, TTL, opaque request ID, fixed reason, coarse lifecycle | Closed schemas, sanitized exceptions, independent Pi validation, no result reader |
 | Local Snowglobe runtime | Query input, policy decision, private execution handle, opaque ID, lifecycle, expiry | One loopback process, value-free logs, request-scoped cleanup |
 | Snowflake | Governed SQL and configured credentials | Explicit connector arguments, least-privileged role, AST policy, independent limits |
 | Local viewer backend | Request lifecycle and admitted Arrow result | Loopback binding, no-store/security headers, stream only complete requests |
@@ -28,13 +29,13 @@ protected from other processes running as the analyst.
 ## Trust boundary
 
 ```text
-┌──────────────────── analyst's local security context ────────────────────┐
-│ coding agent ──MCP──▶ local runtime ──configured identity──▶ Snowflake   │
-│                         │                                                │
-│                         ├── process-local request broker                 │
-│                         │                                                │
-│ browser ◀──Arrow── local viewer backend                                  │
-└──────────────────────────────────────────────────────────────────────────┘
+┌────────────────────── analyst's local security context ──────────────────────┐
+│ coding agent ──MCP / CLI / Pi──▶ local runtime ──configured ID──▶ Snowflake │
+│                                  │                                           │
+│                                  ├── process-local request broker            │
+│                                  │                                           │
+│ browser ◀──Arrow── local viewer backend                                      │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 The local operating-system user boundary is trusted. An attacker who can execute as
@@ -46,7 +47,7 @@ connecting; it does not distinguish the browser from another local process.
 
 | Threat | Control |
 |---|---|
-| Result values or errors leak through MCP | Closed result schemas; lifecycle-only polling; final exception sanitization; canary scans |
+| Result values or errors leak through MCP, CLI, or Pi | Closed result schemas; lifecycle-only polling; bounded/discarded process output; independent Pi receipt validation; final exception sanitization; canary scans |
 | Service is exposed to the network | Supported launcher and Vite bind to `127.0.0.1`; documentation forbids `0.0.0.0` |
 | SQL mutates data or escapes approved objects | One Snowflake `SELECT` AST; object/function allowlists; fixed role/warehouse; least privilege |
 | Expensive or oversized work exhausts resources | Statement/queue timeouts; concurrency cap; server row/column/cell/Arrow/memory limits |
@@ -72,6 +73,9 @@ connecting; it does not distinguish the browser from another local process.
 
 - exact two-tool MCP capability and schema tests;
 - text/structured parity and malformed/unknown-call tests;
+- exact CLI receipt output, stdin submission, and sanitized failure tests;
+- exact Pi tool registration and schemas, bounded subprocess behavior, independent
+  receipt validation, and sanitized failure tests;
 - pending through terminal lifecycle tests with no result-derived fields;
 - canaries in cells, column names, SQL, and internal exceptions absent from MCP and
   process output;
@@ -79,4 +83,4 @@ connecting; it does not distinguish the browser from another local process.
 - cancellation, expiry, source failure, and final-batch overflow tests;
 - local launcher and development server loopback configuration;
 - no browser result storage, external readers, or unbounded main-thread copy; and
-- a real MCP Streamable HTTP round trip.
+- a real MCP Streamable HTTP round trip, including a CLI client call.
