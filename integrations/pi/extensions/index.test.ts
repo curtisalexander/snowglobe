@@ -53,6 +53,17 @@ test("passes exact lifecycle receipts through unchanged", async () => {
   assert.deepEqual(JSON.parse(result.content[0].text), receipt);
 });
 
+test("rejects a lifecycle receipt for a different request", async () => {
+  const tools = registeredTools(
+    JSON.stringify({ request_id: "zyxwvutsrqponmlkjihgfedc", status: "complete" }),
+  );
+  const result = await tools[1].execute("call-id", { request_id: requestId }, undefined);
+  assert.deepEqual(JSON.parse(result.content[0].text), {
+    request_id: requestId,
+    status: "service_unavailable",
+  });
+});
+
 test("invokes the locked package CLI with SQL only on stdin", async () => {
   const calls: Array<{ command: string; args: string[]; stdin: string }> = [];
   const tools: Array<{

@@ -24,6 +24,7 @@ const bundles: duckdb.DuckDBBundles = {
 let database: duckdb.AsyncDuckDB | undefined;
 let connection: duckdb.AsyncDuckDBConnection | undefined;
 let provisionalResult: ProvisionalResult | undefined;
+let shutdownRequested = false;
 const pendingTable = "_snowglobe_pending";
 const publishedTable = "snowglobe_result";
 
@@ -52,6 +53,7 @@ function acknowledge(sequence: number | undefined): void {
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   if (event.data.type === "destroy" || event.data.type === "abort") {
+    shutdownRequested = true;
     await destroyDatabase();
     self.postMessage({ type: "destroyed" });
     self.close();
@@ -62,10 +64,25 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     if (event.data.type === "initialize") {
       if (database) throw new Error("already initialized");
       const bundle = await duckdb.selectBundle(bundles);
+      if (shutdownRequested) return;
       const engineWorker = new Worker(bundle.mainWorker!);
-      database = new duckdb.AsyncDuckDB(new duckdb.VoidLogger(), engineWorker);
-      await database.instantiate(bundle.mainModule, bundle.pthreadWorker);
-      connection = await database.connect();
+      const initializingDatabase = new duckdb.AsyncDuckDB(
+        new duckdb.VoidLogger(),
+        engineWorker,
+      );
+      database = initializingDatabase;
+      await initializingDatabase.instantiate(bundle.mainModule, bundle.pthreadWorker);
+      if (shutdownRequested || database !== initializingDatabase) {
+        await initializingDatabase.terminate().catch(() => undefined);
+        return;
+      }
+      const initializingConnection = await initializingDatabase.connect();
+      if (shutdownRequested || database !== initializingDatabase) {
+        await initializingConnection.close().catch(() => undefined);
+        await initializingDatabase.terminate().catch(() => undefined);
+        return;
+      }
+      connection = initializingConnection;
       self.postMessage({ type: "ready" });
       return;
     }
@@ -73,7 +90,12 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     const activeConnection = connection;
 
     if (event.data.type === "stream-start") {
-      if (provisionalResult) throw new Error("stream already started");
+      if (
+        provisionalResult ||
+        event.data.maximumResultBytes !== maximumResultBytes
+      ) {
+        throw new Error("invalid stream start");
+      }
       provisionalResult = new ProvisionalResult(
         event.data.maximumResultBytes,
         createIncrementalArrowSink(
@@ -121,6 +143,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     acknowledge(event.data.sequence);
   } catch {
     await destroyDatabase();
+    if (shutdownRequested) return;
     self.postMessage({ type: "failed" });
     self.close();
   }

@@ -9,6 +9,7 @@ timings, result sizes, query-history rows, screenshots, or usage values.
 
 - Date:
 - Snowglobe revision:
+- Pi package revision (if used):
 - Dedicated non-production environment confirmed: PASS / FAIL
 - Expected grants independently confirmed: PASS / FAIL
 - Resource monitor independently confirmed active: PASS / FAIL
@@ -21,7 +22,7 @@ timings, result sizes, query-history rows, screenshots, or usage values.
 | Connected preflight |  |  |  |
 | Allowed bounded canary |  |  |  |
 | Empty result |  |  |  |
-| Multiple batches |  |  |  |
+| Multiple batches (or N/A under the runbook condition) |  |  |  |
 | Row overflow |  |  |  |
 | Column overflow |  |  |  |
 | Cell overflow |  |  |  |
@@ -33,8 +34,7 @@ timings, result sizes, query-history rows, screenshots, or usage values.
 | Stage rejection |  | `POLICY_REJECTED` | No execution confirmed:  |
 | Tool-selected config rejection |  | `INVALID_REQUEST` | No execution confirmed:  |
 | Statement timeout |  |  |  |
-| Driver failure |  |  |  |
-| Cleanup failure |  |  |  |
+| Administrator-aborted pending query |  |  |  |
 | Cancellation and repeated cancellation |  |  |  |
 | Expiry |  |  |  |
 | Graceful shutdown and restart |  |  |  |

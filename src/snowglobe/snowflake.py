@@ -1,6 +1,7 @@
 """Request-scoped Snowflake connection and cursor ownership."""
 
 import importlib
+import logging
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from typing import Protocol, cast
@@ -29,6 +30,7 @@ def request_cursor(
 ) -> Iterator[SnowflakeCursor]:
     """Own exactly one connection and cursor for the duration of one request."""
 
+    _suppress_connector_logs()
     connection = (connect or _connect)(**connector_arguments)
     try:
         cursor = connection.cursor()
@@ -43,3 +45,13 @@ def request_cursor(
 def _connect(**connector_arguments: object) -> SnowflakeConnection:
     connector = importlib.import_module("snowflake.connector")
     return cast(SnowflakeConnection, connector.connect(**connector_arguments))
+
+
+def _suppress_connector_logs() -> None:
+    """Prevent connector SQL, identifiers, and driver details reaching process logs."""
+
+    logger = logging.getLogger("snowflake.connector")
+    logger.handlers.clear()
+    logger.addHandler(logging.NullHandler())
+    logger.setLevel(logging.CRITICAL + 1)
+    logger.propagate = False

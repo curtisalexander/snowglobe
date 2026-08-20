@@ -28,7 +28,9 @@ export async function listRequests(): Promise<RequestSummary[]> {
   const body: unknown = await response.json().catch(() => {
     throw new ResultApiError();
   });
-  if (!isRecord(body) || !Array.isArray(body.requests)) throw new ResultApiError();
+  if (!hasExactKeys(body, ["requests"]) || !Array.isArray(body.requests)) {
+    throw new ResultApiError();
+  }
   return body.requests.map(parseRequest);
 }
 
@@ -41,7 +43,9 @@ export async function getRequest(requestId: string): Promise<RequestSummary> {
   const body: unknown = await response.json().catch(() => {
     throw new ResultApiError();
   });
-  return parseRequest(body);
+  const parsed = parseRequest(body);
+  if (parsed.requestId !== requestId) throw new ResultApiError();
+  return parsed;
 }
 
 export async function openResultStream(
@@ -68,7 +72,7 @@ export async function openResultStream(
 
 function parseRequest(value: unknown): RequestSummary {
   if (
-    !isRecord(value) ||
+    !hasExactKeys(value, ["expires_at", "request_id", "status"]) ||
     typeof value.request_id !== "string" ||
     !/^[A-Za-z0-9_-]{20,32}$/.test(value.request_id) ||
     !isStatus(value.status) ||
@@ -86,6 +90,13 @@ function parseRequest(value: unknown): RequestSummary {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function hasExactKeys(value: unknown, expected: string[]): value is Record<string, unknown> {
+  return (
+    isRecord(value) &&
+    JSON.stringify(Object.keys(value).sort()) === JSON.stringify(expected)
+  );
 }
 
 function isStatus(value: unknown): value is RequestStatus {

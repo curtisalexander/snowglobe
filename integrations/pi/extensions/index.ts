@@ -67,7 +67,9 @@ export function registerSnowglobe(pi: ExtensionAPI, runner: typeof runProcess = 
         signal,
         15_000,
       );
-      const receipt = (output && parseStatusReceipt(output)) || unavailableStatus(params.request_id);
+      const parsed = output ? parseStatusReceipt(output) : undefined;
+      const receipt =
+        parsed?.request_id === params.request_id ? parsed : unavailableStatus(params.request_id);
       return { content: [{ type: "text", text: JSON.stringify(receipt) }], details: {} };
     },
   });

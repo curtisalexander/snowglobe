@@ -61,19 +61,27 @@ own package documentation recommends.
 
 ## Install
 
-Install globally for all Pi projects:
+Install the exact clean revision you reviewed globally for all Pi projects:
 
 ```bash
-pi install git:github.com/curtisalexander/snowglobe
+test -z "$(git status --short)"
+SNOWGLOBE_REF="$(git rev-parse HEAD)"
+pi install "git:github.com/curtisalexander/snowglobe@${SNOWGLOBE_REF}"
 pi list
 ```
 
 Or install only for the current trusted project:
 
 ```bash
-pi install git:github.com/curtisalexander/snowglobe -l
+test -z "$(git status --short)"
+SNOWGLOBE_REF="$(git rev-parse HEAD)"
+pi install "git:github.com/curtisalexander/snowglobe@${SNOWGLOBE_REF}" -l
 pi list
 ```
+
+The commit pin is required for the connected MVP campaign. Record the same revision in
+the private evidence template. An unpinned Git source follows a moving repository head
+and is appropriate only when deliberately testing extension changes.
 
 Project-local installation writes `.pi/settings.json`. Pi installs a missing package
 after the project is trusted. Review that settings change before committing it; it
@@ -87,6 +95,9 @@ To use an existing Snowglobe checkout without installing or copying files:
 ```bash
 pi -e /absolute/path/to/snowglobe
 ```
+
+This local-checkout form runs its current files, including uncommitted changes. Do not
+use it for connected evidence unless that exact checkout was reviewed and recorded.
 
 For extension development from this checkout:
 

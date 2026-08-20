@@ -237,10 +237,12 @@ machine rather than through a remote VS Code extension host.
 ### Pi
 
 Pi does not support MCP, so Snowglobe provides a native Pi package. Install it directly
-from the reviewed repository:
+from the exact clean revision you reviewed:
 
 ```bash
-pi install git:github.com/curtisalexander/snowglobe
+test -z "$(git status --short)"
+SNOWGLOBE_REF="$(git rev-parse HEAD)"
+pi install "git:github.com/curtisalexander/snowglobe@${SNOWGLOBE_REF}"
 pi list
 ```
 
@@ -249,6 +251,7 @@ package registers typed tools that invoke Snowglobe's fixed-loopback, result-fre
 it also bundles workflow guidance that Pi discovers as the `snowglobe` skill. The
 runtime must remain running. See the [complete Pi integration guide](pi-integration.md)
 for project-local installation, updates, removal, troubleshooting, and security detail.
+Record `SNOWGLOBE_REF` as the Pi package revision in the private value-free evidence.
 
 ### Another shell-only agent, or Pi adapter debugging
 

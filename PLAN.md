@@ -1,7 +1,7 @@
 # Snowglobe implementation plan
 
 **Status:** Implementation is ready for external connected-MVP validation; Gate 5 connected evidence is next
-**Last updated:** August 19, 2026
+**Last updated:** August 20, 2026
 **Current decision:** [ADR 0014](docs/decisions/0014-pi-extension-package.md)
 **Retained source proposal:** [architecture-proposal.md](docs/architecture-proposal.md)
 
@@ -64,7 +64,7 @@ running as the analyst.
 | Shell-only agents | `snowglobe submit` and `snowglobe status`, returning the same closed receipts through the running MCP service |
 | Pi | Installable package registers the same two native typed tools and a workflow skill over the result-free CLI |
 | Correlation | Random 20–32 character request ID; not a Snowflake ID or secret |
-| Async lifecycle | Pending record before execution; terminal complete/failed/cancelled/expired state |
+| Async lifecycle | Pending before execution; result-ready complete; terminal failed/cancelled/expired |
 | Viewer discovery | List recent local requests or paste the MCP request ID |
 | Viewer data | Complete, admitted Arrow stream; no result bytes through MCP |
 | Browser analytics | In-memory DuckDB-Wasm in a dedicated application worker |
@@ -243,8 +243,9 @@ retain credentials or handles, publish incomplete data, or bypass admission limi
   and no-external-reader tests.
 - [x] Seed non-sensitive canaries in values, column names, SQL, internal errors,
   Unicode, binary, empty results, multiple batches, and oversized cells/results.
-- [x] Capture MCP traffic, stdout/stderr, ordinary logs, URLs, public errors, and
-  browser storage; assert canaries appear only in the local viewer data path.
+- [x] Capture MCP traffic, stdout/stderr, ordinary logs, URLs, and public errors;
+  statically verify the viewer has no browser-persistence surface. Runtime browser
+  storage inspection remains part of the connected Gate 5 procedure.
 - [x] Verify every pending and terminal MCP response contains only the closed receipt,
   with no rows, schema, counts, sizes, timing, Snowflake identifiers, or errors.
 - [x] Verify the supported launcher and Vite server are loopback-only.
@@ -269,9 +270,11 @@ MCP, logs, errors, URLs, browser persistence, or provisional worker state.
   complete → viewer and confirm its canary values appear only in the viewer.
 - [ ] Verify policy rejection before Snowflake execution for mutation, multiple
   statements, disallowed objects/functions, stage access, and tool-selected config.
-- [ ] Verify empty, multi-batch, oversized, timeout, cancellation, driver-failure,
-  expiry, and process-restart behavior while inspecting Snowflake query history and
-  warehouse usage independently.
+- [ ] Verify empty, oversized, timeout, cancellation, driver-failure, expiry, and
+  process-restart behavior while inspecting Snowflake query history and warehouse
+  usage independently. Verify multiple batches when the constrained connector/account
+  produces them at the 50-row cap; otherwise retain the deterministic local
+  multi-batch evidence and record the connected case as not applicable.
 - [ ] Run the complete Python, MCP, connector, stream, browser, build, and boundary
   suites and retain value-free pass/fail evidence.
 

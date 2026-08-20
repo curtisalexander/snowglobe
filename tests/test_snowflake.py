@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 
 from snowglobe.snowflake import request_cursor
@@ -93,3 +95,18 @@ def test_closes_connection_when_cursor_close_fails() -> None:
         events.append("request")
 
     assert events == ["connect", "connection.cursor", "request", "cursor.close", "connection.close"]
+
+
+def test_suppresses_connector_logs_that_can_contain_sql_and_identifiers(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    events: list[str] = []
+    logger = logging.getLogger("snowflake.connector.cursor")
+
+    def connect(**_arguments: object) -> FakeConnection:
+        return FakeConnection(events)
+
+    with caplog.at_level(logging.DEBUG), request_cursor({}, connect=connect):
+        logger.error("PRIVATE_SQL_AND_QUERY_ID_CANARY")
+
+    assert "PRIVATE_SQL_AND_QUERY_ID_CANARY" not in caplog.text

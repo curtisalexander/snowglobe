@@ -75,9 +75,16 @@ class FakeCursor:
 
 
 class FakeConnection:
-    def __init__(self, events: list[str], cursor: FakeCursor) -> None:
+    def __init__(
+        self,
+        events: list[str],
+        cursor: FakeCursor,
+        *,
+        close_error: Exception | None = None,
+    ) -> None:
         self._events = events
         self._cursor = cursor
+        self._close_error = close_error
 
     def cursor(self) -> FakeCursor:
         self._events.append("connection.cursor")
@@ -85,17 +92,21 @@ class FakeConnection:
 
     def close(self) -> None:
         self._events.append("connection.close")
+        if self._close_error is not None:
+            raise self._close_error
 
 
 def _executor(
     broker: InProcessBroker,
     cursor: FakeCursor,
     events: list[str],
+    *,
+    connection_close_error: Exception | None = None,
 ) -> BackgroundQueryExecutor:
     def connect(**arguments: object) -> FakeConnection:
         assert arguments == {"configured": True}
         events.append("connect")
-        return FakeConnection(events, cursor)
+        return FakeConnection(events, cursor, close_error=connection_close_error)
 
     admission = SnowflakeQueryAdmission(
         policy=SnowflakeSqlPolicy.from_view_names((ALLOWED_VIEW,)),
@@ -192,6 +203,32 @@ def test_oversized_result_fails_before_publication_and_closes_resources() -> Non
 
         assert broker.get_request(request.request_id).status is RequestStatus.FAILED
         assert cursor.cancel_count == 0
+        assert events[-2:] == ["cursor.close", "connection.close"]
+
+    asyncio.run(exercise())
+
+
+def test_cleanup_failure_does_not_publish_an_otherwise_admitted_result() -> None:
+    async def exercise() -> None:
+        events: list[str] = []
+        cursor = FakeCursor(events, tables=(pa.table({"VALUE": [1]}),))
+        broker = InProcessBroker()
+        executor = _executor(
+            broker,
+            cursor,
+            events,
+            connection_close_error=RuntimeError("CLEANUP_ERROR_CANARY"),
+        )
+
+        request = await executor.submit(
+            sql=f"select VALUE from {ALLOWED_VIEW}",
+            purpose="cleanup failure",
+            requested_ttl=timedelta(minutes=5),
+        )
+        while broker.get_request(request.request_id).status is RequestStatus.PENDING:
+            await asyncio.sleep(0)
+
+        assert broker.get_request(request.request_id).status is RequestStatus.FAILED
         assert events[-2:] == ["cursor.close", "connection.close"]
 
     asyncio.run(exercise())

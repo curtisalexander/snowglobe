@@ -76,6 +76,39 @@ def test_transport_failure_fails_closed(
     assert canary not in captured.out
 
 
+def test_invalid_submission_is_rejected_without_contacting_the_service(
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
+) -> None:
+    async def invoke(_name: str, _arguments: dict[str, object]) -> dict[str, object]:
+        raise AssertionError("invalid input must not reach the service")
+
+    monkeypatch.setattr(cli, "_invoke", invoke)
+    monkeypatch.setattr(cli.sys, "stdin", StringIO(""))
+
+    assert cli.main(["submit", "--purpose", "test", "--ttl", "300"]) == 0
+    receipt = json.loads(capsys.readouterr().out)
+    assert receipt["reason_code"] == "INVALID_REQUEST"
+
+
+def test_status_response_must_match_the_requested_id(
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
+) -> None:
+    request_id = "abcdefghijklmnopqrstuvwx"
+
+    async def invoke(_name: str, _arguments: dict[str, object]) -> dict[str, object]:
+        return {"request_id": "zyxwvutsrqponmlkjihgfedc", "status": "complete"}
+
+    monkeypatch.setattr(cli, "_invoke", invoke)
+
+    assert cli.main(["status", request_id]) == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "request_id": request_id,
+        "status": "service_unavailable",
+    }
+
+
 def test_malformed_response_with_result_data_fails_closed(
     monkeypatch: MonkeyPatch,
     capsys: CaptureFixture[str],

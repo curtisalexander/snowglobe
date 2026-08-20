@@ -25,3 +25,23 @@ def test_status_receipt_rejects_result_metadata() -> None:
                 "row_count": 42,
             }
         )
+
+
+@pytest.mark.parametrize(
+    "receipt",
+    [
+        {
+            "status": "accepted",
+            "request_id": "01JABCDEFGHJKMNPQRSTVWXYZ",
+            "reason_code": "SERVICE_UNAVAILABLE",
+        },
+        {
+            "status": "rejected",
+            "request_id": "01JABCDEFGHJKMNPQRSTVWXYZ",
+            "reason_code": "NONE",
+        },
+    ],
+)
+def test_receipt_rejects_inconsistent_status_and_reason(receipt: dict[str, str]) -> None:
+    with pytest.raises(ValidationError):
+        QueryReceipt.model_validate(receipt)

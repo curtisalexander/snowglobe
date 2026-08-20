@@ -52,8 +52,11 @@ operator a key:
    - an allowed view expected to return several Arrow batches, if the connector and
      account produce them at the 50-row limit;
    - an allowed view with at least 51 rows for row-overflow rejection;
+   - an allowed view with at least 33 columns for column-overflow rejection;
    - an allowed view with a variable-width cell larger than 16 KiB for cell-overflow
-     rejection; and
+     rejection;
+   - an allowed view whose cells are each no larger than 16 KiB but whose cumulative
+     decoded or serialized Arrow representation exceeds 256 KiB; and
    - an allowed bounded-result view whose execution remains pending long enough to
      test cancellation and the 60-second statement timeout without exceeding the
      resource monitor.
@@ -148,16 +151,30 @@ In a second terminal, start the loopback-only viewer development server:
 npm run dev
 ```
 
-Confirm the runtime health route succeeds and that both listeners use loopback:
+Confirm the runtime health route succeeds:
 
 ```bash
 curl --fail --silent http://127.0.0.1:8000/healthz
 ```
 
+On Linux, inspect the matching listener rows:
+
+```bash
+ss -ltnp | grep -E ':(8000|5173)\b'
+```
+
+On macOS, use `lsof` instead:
+
+```bash
+lsof -nP -iTCP:8000 -iTCP:5173 -sTCP:LISTEN
+```
+
 The MCP endpoint is `http://127.0.0.1:8000/mcp`. Vite prints its loopback viewer URL,
 normally `http://127.0.0.1:5173/`; use the printed URL if that port changes. Do not
 start separate MCP and viewer-backend processes, bind either service to `0.0.0.0`, or
-place a proxy or tunnel in front of them.
+place a proxy or tunnel in front of them. The listener inspection must show only
+`127.0.0.1` for both processes; a successful loopback health request alone does not
+prove that they are not also exposed on another interface.
 
 Configure a native test MCP client with only the MCP endpoint, or install Snowglobe's
 native Pi package. Connection profile, role, warehouse, database, authenticator, and
@@ -254,11 +271,11 @@ grants, resource-monitor state, and warehouse usage:
 |---|---|
 | Allowed bounded canary | `accepted` → `pending` or `complete` → `complete`; complete result visible only in viewer |
 | Empty result | `complete`; declared columns render with no rows |
-| Multiple batches | `complete`; all admitted rows render once and in order |
+| Multiple batches, when the connector/account produces them at the 50-row cap | `complete`; all admitted rows render once and in order; otherwise record N/A and retain the deterministic local multi-batch test result |
 | More than 50 rows, 32 columns, 16-KiB cell, or 256-KiB Arrow/decoded | `failed`; no stream is published |
 | Mutation, multiple statements, unapproved object or function, stage syntax | `POLICY_REJECTED`; no Snowflake query-history entry |
 | Tool-supplied profile, role, warehouse, database, authenticator, or key path | closed-schema rejection; no Snowflake query-history entry |
-| Statement timeout, driver failure, or cleanup failure | only `failed`; no driver detail through MCP or ordinary output |
+| Statement timeout or administrator-aborted pending query | only `failed`; no driver detail through MCP or ordinary output |
 | Cancellation | only `cancelled`; no result source; bounded Snowflake termination |
 | Expiry | only `expired`; no result source; bounded Snowflake termination if still running |
 | Runtime restart | pending work bounded; old ID becomes `not_found`; nothing restored |
@@ -274,6 +291,13 @@ process output, ordinary logs, and URLs. In the browser's Application inspection
 confirm Local Storage, Session Storage, IndexedDB, Cache Storage, and OPFS contain no
 result data and that no service worker is registered; do not inspect the result stream
 in the Network panel.
+
+For the administrator-aborted-query case, submit the approved long-running bounded
+view and have the administrator terminate that query from Snowflake while it is
+pending. This is the connected driver-failure injection; do not alter grants,
+credentials, allowlists, network settings, or test objects. Cleanup-failure behavior
+is not safely injectable in the connected environment and is covered by the local
+fake-connector suite instead.
 
 Copy the [value-free evidence template](mvp-evidence-template.md) outside the
 repository and retain only the permitted fields: date, software revision, case name,
@@ -296,5 +320,7 @@ npm test
 npm run build
 ```
 
-MVP evidence is complete only when every row in the connected matrix and every local
-check passes without result-derived information escaping the viewer path.
+MVP evidence is complete only when every applicable row in the connected matrix and
+every local check passes without result-derived information escaping the viewer path.
+The multiple-batch row is the only case that may be N/A, and only for the connector
+behavior described above.

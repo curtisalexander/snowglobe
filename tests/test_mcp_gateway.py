@@ -126,6 +126,24 @@ def test_invalid_arguments_return_only_fixed_reason() -> None:
     asyncio.run(exercise())
 
 
+def test_unrepresentable_ttl_is_an_invalid_request() -> None:
+    async def exercise() -> None:
+        async with Client(server) as client:
+            result = await client.call_tool(
+                "submit_read_query",
+                {
+                    "sql": "select 1",
+                    "purpose": "test",
+                    "requested_ttl": 10**100,
+                },
+            )
+
+            assert result.structured_content is not None
+            assert result.structured_content["reason_code"] == "INVALID_REQUEST"
+
+    asyncio.run(exercise())
+
+
 def test_synthetic_submission_returns_accepted_only_after_pending_startup() -> None:
     request_broker = InProcessBroker()
     started = asyncio.Event()

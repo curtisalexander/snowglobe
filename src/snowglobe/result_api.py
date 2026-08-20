@@ -111,8 +111,7 @@ async def _framed_stream(
         async for chunk in admitted_ipc_chunks(source, admission_limits):
             if broker.open_source(request_id) is not source:
                 return
-            yield FRAME_HEADER.pack(ARROW_FRAME, len(chunk))
-            yield chunk
+            yield FRAME_HEADER.pack(ARROW_FRAME, len(chunk)) + chunk
         if broker.open_source(request_id) is not source:
             return
     except Exception:

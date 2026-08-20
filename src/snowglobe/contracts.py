@@ -2,7 +2,7 @@
 
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ReceiptStatus(StrEnum):
@@ -25,6 +25,12 @@ class QueryReceipt(BaseModel):
     status: ReceiptStatus
     request_id: str = Field(pattern=r"^[A-Za-z0-9_-]{20,32}$")
     reason_code: ReasonCode
+
+    @model_validator(mode="after")
+    def require_consistent_status_and_reason(self) -> "QueryReceipt":
+        if (self.status is ReceiptStatus.ACCEPTED) is not (self.reason_code is ReasonCode.NONE):
+            raise ValueError("inconsistent submission receipt")
+        return self
 
 
 class QueryLifecycleStatus(StrEnum):

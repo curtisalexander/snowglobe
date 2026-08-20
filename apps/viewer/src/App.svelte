@@ -14,9 +14,9 @@
   import { startDatabaseWorker, type DatabaseWorker, type WorkerState } from "./worker";
 
   const statusLabel: Record<WorkerState, string> = {
-    starting: "Preparing private workspace…",
-    ready: "Private workspace ready",
-    failed: "Private workspace unavailable",
+    starting: "Preparing in-memory workspace…",
+    ready: "In-memory workspace ready",
+    failed: "In-memory workspace unavailable",
   };
 
   let worker: DatabaseWorker | null = null;
@@ -91,7 +91,7 @@
       <p>
         {viewport
           ? "The admitted result is available only in this in-memory workspace."
-          : "Choose a short-lived result to load it into the private browser worker."}
+          : "Choose a short-lived result to load it into the local browser worker."}
       </p>
     </div>
   </section>

@@ -441,21 +441,21 @@ PENDING ── publish admitted source ─────────────�
    ├── execution/admission error ──▶ FAILED        ├── expiry ──▶ EXPIRED
    ├── cancel ─────────────────────▶ CANCELLED     └── cancel ──▶ CANCELLED
    └── expiry ─────────────────────▶ EXPIRED
-
-FAILED ── local viewer cancel ──────────────────▶ CANCELLED
 ```
 
 Important race behavior:
 
-- Cursor registration is exact and one-time. A cursor created after cancellation is
-  immediately cancelled rather than attached.
+- Cursor registration is exact and one-time. A cursor created after any terminal
+  transition is immediately cancelled rather than attached.
 - Releasing a cursor removes only that exact object.
 - Cancellation clears source and cursor under lock, then calls driver cancellation
   outside the lock. Driver cancellation failure is suppressed and never changes the
   closed public state.
-- Cancellation is idempotent for an already-cancelled request.
+- Cancellation is idempotent for an already-cancelled request and does not rewrite a
+  failed request's terminal state.
 - Expiry is refreshed during lookup/list/capacity checks and by an executor-owned
-  expiry task. Expiry clears the source and cancels an attached cursor.
+  expiry task. Expiry clears the source under lock and cancels an attached cursor only
+  after releasing the broker lock.
 - The viewer backend has a cancellation route; MCP deliberately has no cancellation
   tool.
 
@@ -594,7 +594,9 @@ inspection and independent Snowflake history under the constrained runbook.
 | Browser parse/ingestion failure | No new MCP data | Entire DuckDB worker is destroyed |
 
 Ordinary logs must never compensate by printing SQL, profile values, result metadata,
-driver exceptions, or Snowflake identifiers.
+driver exceptions, or Snowflake identifiers. `request_cursor()` suppresses the
+Snowflake connector logger because its debug records may contain SQL and Snowflake
+identifiers.
 
 ## 15. Tests as architecture evidence
 
@@ -604,6 +606,7 @@ The tests are organized around boundaries rather than only functions:
 |---|---|
 | Exact MCP capabilities, schemas, parity, sanitization, HTTP round trip | [`test_mcp_gateway.py`](../tests/test_mcp_gateway.py) |
 | Pi tool registration, receipt validation, stdin, process bounds, failures | [`integrations/pi/extensions`](../integrations/pi/extensions) |
+| Pi root-manifest extension and skill discovery | [`package-smoke.test.mjs`](../integrations/pi/package-smoke.test.mjs) |
 | Lifecycle races, cursor identity, cancellation, expiry, capacity | [`test_broker.py`](../tests/test_broker.py) |
 | Acceptance ordering and generic background cleanup | [`test_executor.py`](../tests/test_executor.py) |
 | Hostile SQL and generated-SQL round trip | [`test_sql_policy.py`](../tests/test_sql_policy.py) |

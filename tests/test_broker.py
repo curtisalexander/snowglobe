@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from threading import Event, Thread
 
 import pyarrow as pa
 import pytest
@@ -146,6 +147,19 @@ def test_cursor_created_after_cancellation_is_immediately_cancelled() -> None:
     assert cursor.cancel_count == 1
 
 
+def test_cursor_created_after_expiry_is_immediately_cancelled() -> None:
+    clock = Clock(datetime(2026, 8, 18, tzinfo=UTC))
+    broker = InProcessBroker(clock=clock)
+    request = broker.submit(requested_ttl=timedelta(minutes=1))
+    cursor = Cursor()
+    clock.now += timedelta(minutes=1)
+
+    with pytest.raises(RequestUnavailable, match=r"^$"):
+        broker.register_cursor(request.request_id, cursor)
+
+    assert cursor.cancel_count == 1
+
+
 def test_only_the_exact_registered_cursor_can_be_released() -> None:
     broker = InProcessBroker()
     request = broker.submit(requested_ttl=timedelta(minutes=5))
@@ -181,6 +195,15 @@ def test_cursor_cancellation_failure_is_private_and_remains_idempotent() -> None
     assert cursor.cancel_count == 1
 
 
+def test_cancelling_a_failed_request_preserves_its_terminal_state() -> None:
+    broker = InProcessBroker()
+    request = broker.submit(requested_ttl=timedelta(minutes=5))
+    broker.fail(request.request_id)
+
+    assert broker.cancel(request.request_id).status is RequestStatus.FAILED
+    assert broker.get_request(request.request_id).status is RequestStatus.FAILED
+
+
 def test_failure_cancels_and_removes_the_private_cursor() -> None:
     broker = InProcessBroker()
     request = broker.submit(requested_ttl=timedelta(minutes=5))
@@ -204,6 +227,42 @@ def test_expiry_cancels_and_removes_the_private_cursor() -> None:
 
     assert broker.get_request(request.request_id).status is RequestStatus.EXPIRED
     assert cursor.cancel_count == 1
+
+
+def test_expiry_cancels_driver_cursor_after_releasing_the_broker_lock() -> None:
+    clock = Clock(datetime(2026, 8, 18, tzinfo=UTC))
+    broker = InProcessBroker(clock=clock)
+    expiring = broker.submit(requested_ttl=timedelta(minutes=1))
+    other = broker.submit(requested_ttl=timedelta(minutes=5), source=Source())
+    cancellation_started = Event()
+    cancellation_release = Event()
+    other_accessed = Event()
+
+    class BlockingCursor:
+        def cancel(self) -> None:
+            cancellation_started.set()
+            cancellation_release.wait(timeout=2)
+
+    broker.register_cursor(expiring.request_id, BlockingCursor())
+    clock.now += timedelta(minutes=1)
+
+    expiry_thread = Thread(target=broker.get_request, args=(expiring.request_id,))
+    expiry_thread.start()
+    assert cancellation_started.wait(timeout=1)
+
+    def access_other() -> None:
+        broker.get_request(other.request_id)
+        other_accessed.set()
+
+    access_thread = Thread(target=access_other)
+    access_thread.start()
+    assert other_accessed.wait(timeout=1)
+
+    cancellation_release.set()
+    expiry_thread.join(timeout=1)
+    access_thread.join(timeout=1)
+    assert not expiry_thread.is_alive()
+    assert not access_thread.is_alive()
 
 
 def test_unknown_request_failure_does_not_reflect_identifier() -> None:

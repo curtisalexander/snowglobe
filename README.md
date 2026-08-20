@@ -151,8 +151,14 @@ result state.
 For native Pi tools instead of shell commands, install the reviewed package:
 
 ```bash
-pi install git:github.com/curtisalexander/snowglobe
+test -z "$(git status --short)"
+SNOWGLOBE_REF="$(git rev-parse HEAD)"
+pi install "git:github.com/curtisalexander/snowglobe@${SNOWGLOBE_REF}"
 ```
+
+The clean-checkout commit pin is required for the connected MVP campaign because Pi
+packages execute with the analyst's permissions. An unpinned Git install is suitable
+only for deliberate extension development.
 
 See the [Pi integration guide](docs/pi-integration.md) for global and project-local
 installation, verification, usage, security behavior, updates, and removal.

@@ -1,3 +1,4 @@
+import asyncio
 import struct
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, replace
@@ -18,6 +19,7 @@ from snowglobe.result_api import (
     SECURITY_HEADERS,
     STREAM_CONTENT_TYPE,
     STREAM_MAGIC,
+    _framed_stream,
     create_app,
 )
 
@@ -244,6 +246,31 @@ def test_cancellation_during_stream_omits_later_bytes_and_completion() -> None:
     assert len(frames) == 1
     assert frames[0][0] == ARROW_FRAME
     assert b"must-not-be-released" not in response.content
+
+
+def test_stream_yields_each_arrow_header_and_payload_atomically() -> None:
+    async def exercise() -> None:
+        broker = InProcessBroker()
+        source = Source((batch(["arrow"]),))
+        item = submitted(broker, source)
+        stream = _framed_stream(
+            broker=broker,
+            request_id=item.request_id,
+            source=source,
+            admission_limits=TEST_LIMITS,
+        )
+
+        assert await anext(stream) == STREAM_MAGIC
+        framed_chunk = await anext(stream)
+        frame_type, payload_length = FRAME_HEADER.unpack_from(framed_chunk)
+        assert frame_type == ARROW_FRAME
+        assert len(framed_chunk) == FRAME_HEADER.size + payload_length
+
+        broker.cancel(item.request_id)
+        with pytest.raises(StopAsyncIteration):
+            await anext(stream)
+
+    asyncio.run(exercise())
 
 
 def test_frame_header_is_fixed_width_network_byte_order() -> None:

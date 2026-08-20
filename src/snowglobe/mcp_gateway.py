@@ -163,14 +163,20 @@ def create_server(control: ControlPlane) -> Server:
 def _valid_arguments(arguments: dict[str, Any] | None) -> bool:
     if arguments is None or set(arguments) != INPUT_FIELDS:
         return False
-    return (
-        isinstance(arguments["sql"], str)
-        and bool(arguments["sql"])
-        and isinstance(arguments["purpose"], str)
-        and bool(arguments["purpose"])
-        and type(arguments["requested_ttl"]) is int
-        and arguments["requested_ttl"] >= 1
-    )
+    if (
+        not isinstance(arguments["sql"], str)
+        or not arguments["sql"]
+        or not isinstance(arguments["purpose"], str)
+        or not arguments["purpose"]
+        or type(arguments["requested_ttl"]) is not int
+        or arguments["requested_ttl"] < 1
+    ):
+        return False
+    try:
+        timedelta(seconds=arguments["requested_ttl"])
+    except OverflowError:
+        return False
+    return True
 
 
 def _valid_status_arguments(arguments: dict[str, Any] | None) -> str | None:

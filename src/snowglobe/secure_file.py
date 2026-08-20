@@ -18,7 +18,7 @@ def read_secure_file(path: Path) -> bytes:
 
     descriptor: int | None = None
     try:
-        descriptor = os.open(path, os.O_RDONLY | os.O_CLOEXEC | no_follow)
+        descriptor = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NONBLOCK | no_follow)
         metadata = os.fstat(descriptor)
         permissions = stat.S_IMODE(metadata.st_mode)
         allowed_permissions = stat.S_IRUSR | stat.S_IWUSR

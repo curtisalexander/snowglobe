@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -154,6 +155,16 @@ def test_rejects_configuration_symlink(tmp_path: Path) -> None:
     target.chmod(0o600)
     path = tmp_path / "sensitive-name.toml"
     path.symlink_to(target)
+
+    with pytest.raises(ConfigurationError) as caught:
+        load_profile(path, "default")
+
+    assert str(caught.value) == ""
+
+
+def test_rejects_configuration_fifo_without_blocking(tmp_path: Path) -> None:
+    path = tmp_path / "sensitive-name.toml"
+    os.mkfifo(path, mode=0o600)
 
     with pytest.raises(ConfigurationError) as caught:
         load_profile(path, "default")

@@ -1,8 +1,8 @@
 """Single-analyst in-process request broker for the synthetic proof."""
 
 import secrets
-from collections.abc import Callable
-from contextlib import suppress
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -86,7 +86,7 @@ class InProcessBroker:
         if requested_ttl <= timedelta(0):
             raise ValueError("requested_ttl must be positive")
 
-        with self._lock:
+        with self._locked_records():
             if source is None and self._at_pending_capacity():
                 raise RequestUnavailable
             request_id = self._new_request_id()
@@ -102,38 +102,32 @@ class InProcessBroker:
     def register_cursor(self, request_id: str, cursor: CancellableCursor) -> RequestView:
         """Attach exactly one private cursor to pending work.
 
-        If cancellation won the startup race, cancel the newly created cursor before
-        reporting that the request is unavailable.
+        If another terminal transition won the startup race, cancel the newly created
+        cursor before reporting that the request is unavailable.
         """
 
-        cancel_immediately = False
-        with self._lock:
-            record = self._record(request_id)
-            if record.status is RequestStatus.CANCELLED:
-                cancel_immediately = True
-            elif record.status is not RequestStatus.PENDING or record.cursor is not None:
-                raise RequestUnavailable
-            else:
-                record.cursor = cursor
-                return record.view()
-
-        if cancel_immediately:
+        try:
+            with self._locked_record(request_id) as record:
+                if record.status is RequestStatus.PENDING and record.cursor is None:
+                    record.cursor = cursor
+                    return record.view()
+        except RequestUnavailable:
             self._cancel_quietly(cursor)
+            raise
+        self._cancel_quietly(cursor)
         raise RequestUnavailable
 
     def release_cursor(self, request_id: str, cursor: CancellableCursor) -> None:
         """Remove a request's exact cursor after connector cleanup starts."""
 
-        with self._lock:
-            record = self._record(request_id)
+        with self._locked_record(request_id) as record:
             if record.status is RequestStatus.PENDING and record.cursor is cursor:
                 record.cursor = None
 
     def publish(self, request_id: str, source: ArrowBatchSource) -> RequestView:
         """Atomically attach a result source and mark pending work complete."""
 
-        with self._lock:
-            record = self._record(request_id)
+        with self._locked_record(request_id) as record:
             if record.status is not RequestStatus.PENDING:
                 raise RequestUnavailable
             record.source = source
@@ -143,8 +137,7 @@ class InProcessBroker:
 
     def fail(self, request_id: str) -> RequestView:
         cursor: CancellableCursor | None
-        with self._lock:
-            record = self._record(request_id)
+        with self._locked_record(request_id) as record:
             if record.status is not RequestStatus.PENDING:
                 raise RequestUnavailable
             cursor = record.cursor
@@ -157,30 +150,28 @@ class InProcessBroker:
         return view
 
     def list_requests(self) -> tuple[RequestView, ...]:
-        with self._lock:
-            return tuple(
-                self._refresh_expiry(record).view() for record in reversed(self._records.values())
-            )
+        with self._locked_records():
+            return tuple(record.view() for record in reversed(self._records.values()))
 
     def get_request(self, request_id: str) -> RequestView:
-        with self._lock:
-            return self._record(request_id).view()
+        with self._locked_record(request_id) as record:
+            return record.view()
 
     def open_source(self, request_id: str) -> ArrowBatchSource:
-        with self._lock:
-            record = self._record(request_id)
+        with self._locked_record(request_id) as record:
             if record.status is not RequestStatus.COMPLETE or record.source is None:
                 raise RequestUnavailable
             return record.source
 
     def cancel(self, request_id: str) -> RequestView:
         cursor: CancellableCursor | None
-        with self._lock:
-            record = self._record(request_id)
+        with self._locked_record(request_id) as record:
             if record.status is RequestStatus.CANCELLED:
                 return record.view()
             if record.status is RequestStatus.EXPIRED:
                 raise RequestUnavailable
+            if record.status is RequestStatus.FAILED:
+                return record.view()
             record.status = RequestStatus.CANCELLED
             record.source = None
             cursor = record.cursor
@@ -191,13 +182,36 @@ class InProcessBroker:
             self._cancel_quietly(cursor)
         return view
 
-    def _record(self, request_id: str) -> _RequestRecord:
-        record = self._records.get(request_id)
-        if record is None:
-            raise RequestUnavailable
-        return self._refresh_expiry(record)
+    @contextmanager
+    def _locked_record(self, request_id: str) -> Iterator[_RequestRecord]:
+        expired_cursor: CancellableCursor | None = None
+        try:
+            with self._lock:
+                record = self._records.get(request_id)
+                if record is None:
+                    raise RequestUnavailable
+                expired_cursor = self._expire(record)
+                yield record
+        finally:
+            if expired_cursor is not None:
+                self._cancel_quietly(expired_cursor)
 
-    def _refresh_expiry(self, record: _RequestRecord) -> _RequestRecord:
+    @contextmanager
+    def _locked_records(self) -> Iterator[None]:
+        expired_cursors: list[CancellableCursor] = []
+        try:
+            with self._lock:
+                expired_cursors = [
+                    cursor
+                    for record in self._records.values()
+                    if (cursor := self._expire(record)) is not None
+                ]
+                yield
+        finally:
+            for cursor in expired_cursors:
+                self._cancel_quietly(cursor)
+
+    def _expire(self, record: _RequestRecord) -> CancellableCursor | None:
         if (
             record.status
             in {
@@ -210,9 +224,8 @@ class InProcessBroker:
             record.status = RequestStatus.EXPIRED
             record.source = None
             record.cursor = None
-            if cursor is not None:
-                self._cancel_quietly(cursor)
-        return record
+            return cursor
+        return None
 
     def _new_request_id(self) -> str:
         while (request_id := secrets.token_urlsafe(18)) in self._records:
@@ -222,10 +235,7 @@ class InProcessBroker:
     def _at_pending_capacity(self) -> bool:
         if self._maximum_pending_requests is None:
             return False
-        pending = sum(
-            self._refresh_expiry(record).status is RequestStatus.PENDING
-            for record in self._records.values()
-        )
+        pending = sum(record.status is RequestStatus.PENDING for record in self._records.values())
         return pending >= self._maximum_pending_requests
 
     def _now(self) -> datetime:

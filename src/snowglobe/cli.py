@@ -5,6 +5,7 @@ import asyncio
 import json
 import sys
 from collections.abc import Sequence
+from datetime import timedelta
 from typing import Any, Never
 
 from mcp import ClientSession
@@ -57,6 +58,12 @@ async def _invoke(name: str, arguments: dict[str, Any]) -> dict[str, Any] | None
 async def _run(arguments: argparse.Namespace, sql: str) -> QueryReceipt | QueryStatusReceipt:
     if arguments.command == "submit":
         try:
+            requested_ttl = timedelta(seconds=arguments.ttl)
+        except OverflowError:
+            requested_ttl = timedelta(0)
+        if not sql or not arguments.purpose or requested_ttl <= timedelta(0):
+            return rejected_receipt(ReasonCode.INVALID_REQUEST)
+        try:
             content = await _invoke(
                 SUBMIT_TOOL_NAME,
                 {
@@ -75,14 +82,15 @@ async def _run(arguments: argparse.Namespace, sql: str) -> QueryReceipt | QueryS
             status=QueryLifecycleStatus.NOT_FOUND,
         ).request_id
     except Exception:
-        valid_request_id = None
+        return invalid_status_receipt()
 
     try:
         content = await _invoke(STATUS_TOOL_NAME, {"request_id": arguments.request_id})
-        return QueryStatusReceipt.model_validate(content)
+        receipt = QueryStatusReceipt.model_validate(content)
+        if receipt.request_id != valid_request_id:
+            raise ValueError
+        return receipt
     except Exception:
-        if valid_request_id is None:
-            return invalid_status_receipt()
         return QueryStatusReceipt(
             request_id=valid_request_id,
             status=QueryLifecycleStatus.SERVICE_UNAVAILABLE,

@@ -50,6 +50,15 @@ def test_duckdb_worker_has_no_external_reader_or_extension_surface() -> None:
         assert forbidden not in source
 
 
+def test_duckdb_initialization_checks_for_concurrent_shutdown() -> None:
+    source = (VIEWER_SOURCE / "duckdb.worker.ts").read_text(encoding="utf-8")
+
+    assert "shutdownRequested = true;\n    await destroyDatabase();" in source
+    assert source.count("shutdownRequested || database !== initializingDatabase") == 2
+    assert "await initializingConnection.close().catch" in source
+    assert "await initializingDatabase.terminate().catch" in source
+
+
 def test_result_stream_is_opened_only_by_explicit_request_action() -> None:
     app = (VIEWER_SOURCE / "App.svelte").read_text(encoding="utf-8")
 
