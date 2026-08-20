@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 import sqlglot
 from sqlglot import ErrorLevel, exp
+from sqlglot.optimizer.scope import traverse_scope
 
 from snowglobe.mvp_limits import MVP_MAXIMUM_VIEWPORT_ROWS
 
@@ -54,18 +55,25 @@ class SnowflakeSqlPolicy:
     def _validate(self, statement: exp.Query) -> None:
         """Recursively authorize every external relation in the read-query AST."""
 
-        cte_names = {cte.alias.upper() for cte in statement.find_all(exp.CTE)}
-        for node in statement.walk():
-            if isinstance(node, exp.Table):
-                self._validate_table(node, cte_names)
+        scopes = traverse_scope(statement)
+        if scopes is None:
+            raise QueryPolicyRejected
+        for scope in scopes:
+            for relation, source in scope.selected_sources.values():
+                if isinstance(source, exp.Table):
+                    self._validate_table(source)
+                elif isinstance(relation, (exp.Query, exp.Table, exp.Values)):
+                    continue
+                else:
+                    # Table-producing functions are relation sources rather than
+                    # ordinary expressions and can read data without a Table node.
+                    raise QueryPolicyRejected
 
-    def _validate_table(self, table: exp.Table, cte_names: set[str]) -> None:
+    def _validate_table(self, table: exp.Table) -> None:
         if not isinstance(table.this, exp.Identifier):
             raise QueryPolicyRejected
         if not table.catalog and not table.db:
-            if _canonical_identifier(table.this) not in cte_names:
-                raise QueryPolicyRejected
-            return
+            raise QueryPolicyRejected
         if not isinstance(table.args.get("catalog"), exp.Identifier) or not isinstance(
             table.args.get("db"), exp.Identifier
         ):

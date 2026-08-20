@@ -97,8 +97,12 @@ def test_unknown_tool_name_is_not_reflected() -> None:
         async with Client(server) as client:
             result = await client.call_tool(canary, {})
 
-            assert result.is_error is True
-            assert result.structured_content is None
+            assert result.structured_content is not None
+            assert set(result.structured_content) == {"status", "request_id", "reason_code"}
+            assert result.structured_content["status"] == "rejected"
+            assert result.structured_content["reason_code"] == "INVALID_REQUEST"
+            assert isinstance(result.content[0], TextContent)
+            assert json.loads(result.content[0].text) == result.structured_content
             assert canary not in result.model_dump_json()
 
     asyncio.run(exercise())

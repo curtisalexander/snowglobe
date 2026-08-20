@@ -17,6 +17,14 @@
       "./integrations/pi/extensions/index.ts"
     ]
   },
+  "files": [
+    "integrations/pi/extensions/contracts.ts",
+    "integrations/pi/extensions/index.ts",
+    "integrations/pi/extensions/process.ts",
+    "src/snowglobe/*.py",
+    "pyproject.toml",
+    "uv.lock"
+  ],
   "scripts": {
     "build": "npm run build --workspace=@snowglobe/viewer",
     "dev": "npm run dev --workspace=@snowglobe/viewer",
@@ -29,8 +37,8 @@
     "node": ">=22.12"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*",
-    "typebox": "*"
+    "@earendil-works/pi-coding-agent": ">=0.84.2 <0.85",
+    "typebox": ">=1.3.16 <2"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "0.84.2",

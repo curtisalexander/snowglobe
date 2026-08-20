@@ -25,49 +25,94 @@
   let listFailed = false;
   let requestId = "";
   let lookupFailed = false;
+  let lookupPending = false;
+  let listLoading = false;
   let loadingRequest: string | null = null;
+  let openedRequest: string | null = null;
+  let loadFailed = false;
   let viewport: Viewport | null = null;
 
   onMount(() => {
-    worker = startDatabaseWorker((state) => (workerState = state));
-    void listRequests()
-      .then((items) => (requests = items))
-      .catch(() => (listFailed = true));
+    startWorkspace();
+    void refreshRequests();
+    const refreshTimer = window.setInterval(() => void refreshRequests(), 2_000);
 
     return () => {
+      window.clearInterval(refreshTimer);
       worker?.destroy();
       worker = null;
     };
   });
+
+  function startWorkspace(): void {
+    worker?.destroy();
+    workerState = "starting";
+    let nextWorker: DatabaseWorker;
+    nextWorker = startDatabaseWorker((state) => {
+      if (worker === nextWorker) workerState = state;
+    });
+    worker = nextWorker;
+  }
+
+  async function refreshRequests(): Promise<void> {
+    if (listLoading) return;
+    listLoading = true;
+    try {
+      requests = await listRequests();
+      listFailed = false;
+    } catch {
+      listFailed = true;
+    } finally {
+      listLoading = false;
+    }
+  }
 
   async function loadRequest(id: string): Promise<void> {
     const databaseWorker = worker;
     if (!databaseWorker || loadingRequest || viewport) return;
 
     loadingRequest = id;
+    loadFailed = false;
     try {
       const stream = await openResultStream(id);
       await databaseWorker.load(stream, maximumResultBytes);
       viewport = await databaseWorker.viewport(0, maximumViewportRows);
+      openedRequest = id;
     } catch {
       databaseWorker.destroy();
-      workerState = "failed";
+      if (worker === databaseWorker) worker = null;
+      loadFailed = true;
+      startWorkspace();
     } finally {
       loadingRequest = null;
     }
   }
 
   async function findRequest(): Promise<void> {
+    if (lookupPending) return;
+    const searchedRequestId = requestId.trim();
     lookupFailed = false;
+    lookupPending = true;
     try {
-      const item = await getRequest(requestId.trim());
+      const item = await getRequest(searchedRequestId);
       requests = [
         item,
         ...(requests ?? []).filter((request) => request.requestId !== item.requestId),
       ];
     } catch {
       lookupFailed = true;
+    } finally {
+      lookupPending = false;
     }
+  }
+
+  function closeResult(): void {
+    worker?.destroy();
+    worker = null;
+    viewport = null;
+    openedRequest = null;
+    loadFailed = false;
+    startWorkspace();
   }
 </script>
 
@@ -75,12 +120,8 @@
   <header>
     <img src={logo} alt="" class="logo" />
     <div>
-      <p class="eyebrow">Governed data, kept in view</p>
       <h1>Snowglobe</h1>
-      <p class="lede">
-        Explore approved Snowflake results without placing result data in an AI agent’s
-        context.
-      </p>
+      <p>Local Snowflake result viewer</p>
     </div>
   </header>
 
@@ -90,19 +131,26 @@
       <h2>{statusLabel[workerState]}</h2>
       <p>
         {viewport
-          ? "The admitted result is available only in this in-memory workspace."
+          ? `Showing ${openedRequest ?? "the selected request"} in this tab.`
           : "Choose a short-lived result to load it into the local browser worker."}
       </p>
+      {#if workerState === "failed"}
+        <button type="button" class="secondary" onclick={startWorkspace}>Retry workspace</button>
+      {/if}
     </div>
   </section>
 
   <section class="results" aria-labelledby="results-heading">
     <div class="section-heading">
       <div>
-        <p class="eyebrow">Local viewer backend</p>
         <h2 id="results-heading">Recent requests</h2>
       </div>
-      {#if requests}<span>{requests.length} available</span>{/if}
+      <div class="heading-actions">
+        {#if requests}<span>{requests.length} available</span>{/if}
+        <button type="button" class="secondary" disabled={listLoading} onclick={() => void refreshRequests()}>
+          {listLoading ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
     </div>
 
     <form class="request-lookup" onsubmit={(event) => { event.preventDefault(); void findRequest(); }}>
@@ -116,7 +164,9 @@
           autocomplete="off"
           spellcheck="false"
         />
-        <button type="submit">Find request</button>
+        <button type="submit" disabled={lookupPending}>
+          {lookupPending ? "Finding…" : "Find request"}
+        </button>
       </div>
     </form>
     {#if lookupFailed}
@@ -126,6 +176,9 @@
     {/if}
     {#if listFailed}
       <p class="notice" role="alert">The local viewer backend is unavailable.</p>
+    {/if}
+    {#if loadFailed}
+      <p class="notice" role="alert">The result could not be loaded. You can try again.</p>
     {/if}
     {#if requests?.length === 0}
       <p class="notice">No requests are available in this local session.</p>
@@ -137,7 +190,7 @@
             <div>
               <strong>{request.status}</strong>
               <code>{request.requestId}</code>
-              <small>Expires {new Date(request.expiresAt).toLocaleString()}</small>
+              <small>Expires <time datetime={request.expiresAt}>{new Date(request.expiresAt).toLocaleString()}</time></small>
             </div>
             <button
               type="button"
@@ -156,10 +209,12 @@
     <section class="viewport" aria-labelledby="viewport-heading">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">Bounded viewport</p>
           <h2 id="viewport-heading">Result preview</h2>
         </div>
-        <span>First {viewport.rows.length} rows</span>
+        <div class="heading-actions">
+          <span>First {viewport.rows.length} rows</span>
+          <button type="button" class="secondary" onclick={closeResult}>Close result</button>
+        </div>
       </div>
       <!-- svelte-ignore a11y_no_noninteractive_tabindex (scroll region must be keyboard reachable) -->
       <div class="table-scroll" role="region" aria-label="Result table" tabindex="0">
@@ -189,7 +244,7 @@
   {/if}
 
   <aside>
-    Results are short-lived, not restored automatically, and never returned through the
-    MCP tool. Reloading or closing this page destroys the in-memory workspace.
+    Results are short-lived and are not restored. Closing this page destroys the
+    in-memory workspace.
   </aside>
 </main>

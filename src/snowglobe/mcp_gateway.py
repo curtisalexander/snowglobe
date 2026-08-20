@@ -122,10 +122,7 @@ async def _call_tool(control: ControlPlane, params: CallToolRequestParams) -> Ca
                 return _receipt_result(invalid_status_receipt())
             return _receipt_result(control.status(request_id))
 
-        return CallToolResult(
-            content=[TextContent(type="text", text="Tool unavailable.")],
-            is_error=True,
-        )
+        return _receipt_result(rejected_receipt(ReasonCode.INVALID_REQUEST))
     except Exception:
         if params.name == STATUS_TOOL_NAME:
             valid_id = _valid_status_arguments(params.arguments)

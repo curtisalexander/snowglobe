@@ -136,9 +136,10 @@ uv run snowglobe-local
 npm run dev
 ```
 
-Do not run `mcp_gateway.app` and `result_api.app` as separate processes: the MVP broker
-is process-local. For a configured connected session, use the complete profile,
-preflight, launch, client, prompt, and shutdown procedure in the
+The result routes have no standalone application export. Always use `snowglobe-local`:
+the MVP broker is process-local and must be shared by MCP and the viewer routes. For a
+configured connected session, use the complete profile, preflight, launch, client,
+prompt, and shutdown procedure in the
 [getting-started guide](getting-started.md). Do not commit `connections.toml` or a key.
 
 ### Backend ownership
@@ -346,10 +347,11 @@ ORDER BY account_id
 ```
 
 is regenerated with a server-owned top-level `LIMIT 51`. A model-supplied larger
-literal limit is replaced; a smaller one is preserved. Ordinary read expressions,
-functions, and set operations are accepted. DDL, DML, multiple statements, and
-unapproved or partially qualified external relations are rejected. The configured
-read-only Snowflake role remains the mutation boundary.
+literal limit is replaced; a smaller one is preserved. Ordinary scalar expressions,
+functions, and set operations are accepted. Table-producing functions are rejected
+because they are relation sources that can read data without a normal table node. DDL,
+DML, multiple statements, and unapproved or partially qualified external relations are
+also rejected. The configured read-only Snowflake role remains the mutation boundary.
 
 ## 8. Submission, execution, and acceptance ordering
 
@@ -479,11 +481,11 @@ type 1 = non-empty Arrow IPC payload
 type 2 = completion, payload length must be zero
 ```
 
-The backend re-runs Arrow admission while replaying the source. Before every payload
-and before completion, it verifies that the broker still exposes the same source
-object. Cancellation, expiry, overflow, iteration failure, or source replacement makes
-the generator stop without a completion frame. Error details never become stream
-payloads.
+The backend serializes the already-admitted source under the transport byte ceiling.
+Before every payload and before completion, it verifies that the broker still exposes
+the same source object. Cancellation, expiry, overflow, iteration failure, or source
+replacement makes the generator stop without a completion frame. Error details never
+become stream payloads.
 
 ## 12. Browser ingestion and publication
 
@@ -492,8 +494,9 @@ dedicated application worker:
 
 ```text
 App.svelte
-├── list or look up request metadata
+├── refresh or look up request metadata
 ├── explicit “Open result” action
+├── replace a failed or closed one-result worker
 ├── fetch framed stream through result-api.ts
 └── worker.ts
     ├── transfer each transport chunk to duckdb.worker.ts
@@ -514,7 +517,8 @@ duckdb.worker.ts
 [`ResultStreamParser`](../apps/viewer/src/result-stream.ts) accepts arbitrarily split
 transport chunks, but rejects bad magic, unknown frame types, zero-length Arrow frames,
 oversized declared frames, cumulative overflow, trailing bytes, truncated frames, and
-missing completion.
+missing completion. It also bounds buffered protocol bytes before copying an incoming
+transport chunk.
 
 [`createIncrementalArrowSink()`](../apps/viewer/src/arrow-ingest.ts) connects the
 parser to Apache Arrow's async record-batch reader. Queue `push()` does not resolve
@@ -526,9 +530,12 @@ partially parsed data is never queryable through the viewport path. Any parser,
 ingestion, DuckDB, viewport, abort, or unexpected message failure closes the
 connection, terminates DuckDB, reports `failed`, and closes the worker.
 
-[`worker.ts`](../apps/viewer/src/worker.ts) permits one load only. A second load attempt,
-stream error, browser worker error, or viewer unmount destroys the worker. Result
-chunks are transferred rather than copied when posted to the worker.
+[`worker.ts`](../apps/viewer/src/worker.ts) permits one load per worker, validates reply
+types and viewport shape, and cancels an active stream reader during destruction. A
+second load attempt, stream error, browser worker error, or viewer unmount destroys
+that worker. `App.svelte` creates a fresh worker after a load failure or when the
+analyst closes a result, so another request can be opened. Result chunks are transferred
+rather than copied when posted to the worker.
 
 Finally, [`createViewport()`](../apps/viewer/src/viewport.ts) converts only bounded
 cells to strings, hex-encodes binary, uses ISO timestamps, preserves null, and enforces

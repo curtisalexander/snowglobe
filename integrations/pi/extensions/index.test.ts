@@ -9,7 +9,10 @@ function registeredTools(output: string) {
   const tools: Array<{
     name: string;
     parameters: { additionalProperties?: boolean };
-    execute: (...args: unknown[]) => Promise<{ content: Array<{ type: string; text: string }> }>;
+    execute: (...args: unknown[]) => Promise<{
+      content: Array<{ type: string; text: string }>;
+      details: object;
+    }>;
   }> = [];
   const pi = { registerTool: (tool: (typeof tools)[number]) => tools.push(tool) };
   const runner = async () => output;
@@ -46,6 +49,20 @@ test("does not pass malformed CLI result data into Pi context", async () => {
   assert.doesNotMatch(result.content[0].text, /RESULT_VALUE_CANARY|SQL_CANARY/);
 });
 
+test("passes an exact submission receipt with empty details", async () => {
+  const receipt = { status: "accepted", request_id: requestId, reason_code: "NONE" };
+  const tools = registeredTools(JSON.stringify(receipt));
+
+  const result = await tools[0].execute(
+    "call-id",
+    { sql: "SELECT 1", requested_ttl: 300 },
+    undefined,
+  );
+
+  assert.deepEqual(JSON.parse(result.content[0].text), receipt);
+  assert.deepEqual(result.details, {});
+});
+
 test("passes exact lifecycle receipts through unchanged", async () => {
   const receipt = { request_id: requestId, status: "complete" };
   const tools = registeredTools(JSON.stringify(receipt));
@@ -64,10 +81,27 @@ test("rejects a lifecycle receipt for a different request", async () => {
   });
 });
 
+test("rejects lifecycle metadata and keeps details empty", async () => {
+  const tools = registeredTools(
+    JSON.stringify({ request_id: requestId, status: "complete", row_count: 1 }),
+  );
+
+  const result = await tools[1].execute("call-id", { request_id: requestId }, undefined);
+
+  assert.deepEqual(JSON.parse(result.content[0].text), {
+    request_id: requestId,
+    status: "service_unavailable",
+  });
+  assert.deepEqual(result.details, {});
+});
+
 test("invokes the locked package CLI with SQL only on stdin", async () => {
   const calls: Array<{ command: string; args: string[]; stdin: string }> = [];
   const tools: Array<{
-    execute: (...args: unknown[]) => Promise<{ content: Array<{ type: string; text: string }> }>;
+    execute: (...args: unknown[]) => Promise<{
+      content: Array<{ type: string; text: string }>;
+      details: object;
+    }>;
   }> = [];
   const pi = { registerTool: (tool: (typeof tools)[number]) => tools.push(tool) };
   const runner = async (command: string, args: string[], stdin: string) => {

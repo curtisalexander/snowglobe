@@ -15,20 +15,33 @@ export class ResultStreamError extends Error {
 
 export class ResultStreamParser {
   readonly #maximumResultBytes: bigint;
+  readonly #maximumBufferedBytes: number;
   #buffer: Uint8Array = new Uint8Array();
   #magicRead = false;
   #complete = false;
   #arrowBytes = 0n;
 
   constructor(maximumResultBytes: number) {
-    if (!Number.isSafeInteger(maximumResultBytes) || maximumResultBytes <= 0) {
+    const maximumProtocolBytes =
+      STREAM_MAGIC.byteLength +
+      FRAME_HEADER_BYTES +
+      maximumResultBytes * (FRAME_HEADER_BYTES + 1);
+    if (
+      !Number.isSafeInteger(maximumResultBytes) ||
+      maximumResultBytes <= 0 ||
+      !Number.isSafeInteger(maximumProtocolBytes)
+    ) {
       throw new ResultStreamError();
     }
     this.#maximumResultBytes = BigInt(maximumResultBytes);
+    this.#maximumBufferedBytes = maximumProtocolBytes;
   }
 
   push(chunk: Uint8Array): Uint8Array[] {
     if (this.#complete && chunk.byteLength > 0) throw new ResultStreamError();
+    if (this.#buffer.byteLength + chunk.byteLength > this.#maximumBufferedBytes) {
+      throw new ResultStreamError();
+    }
     this.#buffer = concatenate(this.#buffer, chunk);
     const arrowChunks: Uint8Array[] = [];
 

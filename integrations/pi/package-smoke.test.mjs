@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import test from "node:test";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,4 +15,36 @@ test("Pi discovers the package extension from the root manifest", async () => {
     "submit_read_query",
     "get_query_status",
   ]);
+});
+
+test("the installable package contains only its runtime", () => {
+  const packed = JSON.parse(
+    execFileSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
+      cwd: packageRoot,
+      encoding: "utf8",
+    }),
+  );
+  const files = new Set(packed[0].files.map((file) => file.path));
+
+  for (const required of [
+    "integrations/pi/extensions/contracts.ts",
+    "integrations/pi/extensions/index.ts",
+    "integrations/pi/extensions/process.ts",
+    "src/snowglobe/cli.py",
+    "pyproject.toml",
+    "uv.lock",
+  ]) {
+    assert.ok(files.has(required), `missing package runtime file: ${required}`);
+  }
+  assert.ok(
+    [...files].every(
+      (file) =>
+        !file.startsWith("apps/") &&
+        !file.startsWith("docs/") &&
+        !file.startsWith("tests/") &&
+        !file.startsWith(".agents/") &&
+        !file.includes("__pycache__") &&
+        !file.endsWith(".pyc"),
+    ),
+  );
 });

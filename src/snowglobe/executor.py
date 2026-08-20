@@ -20,6 +20,7 @@ class BackgroundQueryExecutor:
         self._broker = broker
         self._admit = admit
         self._tasks: set[asyncio.Task[None]] = set()
+        self._closed = False
 
     async def submit(
         self,
@@ -29,6 +30,8 @@ class BackgroundQueryExecutor:
     ) -> RequestView:
         """Return after admission, pending registration, and task scheduling succeed."""
 
+        if self._closed:
+            raise RequestUnavailable
         work = self._admit(sql)
         request = self._broker.submit(requested_ttl=requested_ttl)
         loop = asyncio.get_running_loop()
@@ -47,6 +50,7 @@ class BackgroundQueryExecutor:
     async def close(self) -> None:
         """Cancel pending work and wait for request-scoped cleanup during shutdown."""
 
+        self._closed = True
         for request in self._broker.list_requests():
             if request.status.value == "pending":
                 with suppress(RequestUnavailable):

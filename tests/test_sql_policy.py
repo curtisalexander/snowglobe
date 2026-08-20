@@ -25,6 +25,16 @@ def policy() -> SnowflakeSqlPolicy:
             "SELECT * FROM approved LIMIT 51",
         ),
         (
+            f"WITH approved AS (SELECT * FROM {APPROVED_VIEW}) "
+            "SELECT * FROM (SELECT * FROM approved) AS nested",
+            f"WITH approved AS (SELECT * FROM {APPROVED_VIEW}) "
+            "SELECT * FROM (SELECT * FROM approved) AS nested LIMIT 51",
+        ),
+        (
+            "SELECT * FROM (VALUES (1), (2)) AS local_values(value)",
+            "SELECT * FROM (VALUES (1), (2)) AS local_values(value) LIMIT 51",
+        ),
+        (
             f"SELECT COUNT(*) FROM {APPROVED_VIEW}",
             f"SELECT COUNT(*) FROM {APPROVED_VIEW} LIMIT 51",
         ),
@@ -91,6 +101,10 @@ def test_authorizes_read_query_and_applies_overflow_cap(
         "SELECT * FROM GOVERNED_DATABASE.GOVERNED_SCHEMA.UNAPPROVED_VIEW",
         "SELECT * FROM GOVERNED_SCHEMA.APPROVED_VIEW",
         "SELECT * FROM APPROVED_VIEW",
+        "SELECT * FROM TABLE(RESULT_SCAN('01abc'))",
+        "SELECT * FROM TABLE(GENERATOR(ROWCOUNT => 10))",
+        f"SELECT * FROM {APPROVED_VIEW}, LATERAL FLATTEN(INPUT => ARRAY_CONSTRUCT(1))",
+        "SELECT * FROM DIRECTORY(@stage)",
         'SELECT * FROM "governed_database"."GOVERNED_SCHEMA"."APPROVED_VIEW"',
         f"SELECT * FROM {APPROVED_VIEW} LIMIT NULL",
         f"SELECT * FROM {APPROVED_VIEW} LIMIT $1",
@@ -104,6 +118,15 @@ def test_rejects_non_queries_unapproved_relations_and_unbounded_limits(
         policy.authorize(sql)
 
     assert caught.value.__cause__ is None
+
+
+def test_cte_names_are_authorized_only_in_their_lexical_scope(
+    policy: SnowflakeSqlPolicy,
+) -> None:
+    sql = "SELECT * FROM SECRET, (WITH SECRET AS (SELECT 1) SELECT * FROM SECRET) AS nested"
+
+    with pytest.raises(QueryPolicyRejected, match=r"^$"):
+        policy.authorize(sql)
 
 
 @pytest.mark.parametrize(

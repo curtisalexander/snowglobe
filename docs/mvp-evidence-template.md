@@ -30,7 +30,7 @@ timings, result sizes, query-history rows, screenshots, or usage values.
 | Mutation rejection |  | `POLICY_REJECTED` | No execution confirmed:  |
 | Multiple-statement rejection |  | `POLICY_REJECTED` | No execution confirmed:  |
 | Unapproved-object rejection |  | `POLICY_REJECTED` | No execution confirmed:  |
-| Function rejection |  | `POLICY_REJECTED` | No execution confirmed:  |
+| Table-producing-function rejection |  | `POLICY_REJECTED` | No execution confirmed:  |
 | Stage rejection |  | `POLICY_REJECTED` | No execution confirmed:  |
 | Tool-selected config rejection |  | `INVALID_REQUEST` | No execution confirmed:  |
 | Statement timeout |  |  |  |

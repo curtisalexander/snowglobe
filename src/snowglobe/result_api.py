@@ -1,4 +1,4 @@
-"""Human-facing Result API for the synthetic boundary proof."""
+"""Human-facing result routes for the local viewer."""
 
 import struct
 from collections.abc import AsyncIterator
@@ -18,7 +18,6 @@ from snowglobe.broker import (
     RequestUnavailable,
     RequestView,
 )
-from snowglobe.runtime import broker as local_broker
 
 STREAM_CONTENT_TYPE = "application/vnd.snowglobe.arrow-stream"
 STREAM_MAGIC = b"SNOWGLOBE-ARROW-STREAM\x01"
@@ -132,7 +131,7 @@ def _unavailable() -> JSONResponse:
 
 def create_app(
     *,
-    broker: InProcessBroker | None = None,
+    broker: InProcessBroker,
     admission_limits: ArrowAdmissionLimits | None = None,
 ) -> Starlette:
     application = Starlette(
@@ -143,9 +142,6 @@ def create_app(
             Route("/v1/requests/{request_id}/stream", stream_request, methods=["GET"]),
         ]
     )
-    application.state.broker = broker or local_broker
+    application.state.broker = broker
     application.state.admission_limits = admission_limits
     return application
-
-
-app = create_app()

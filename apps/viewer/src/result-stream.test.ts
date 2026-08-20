@@ -67,6 +67,12 @@ describe("result stream parser", () => {
     expect(() => parser.push(concatenate(magic, header))).toThrow(ResultStreamError);
   });
 
+  it("rejects an oversized transport chunk before copying it into parser state", () => {
+    const parser = new ResultStreamParser(16);
+
+    expect(() => parser.push(new Uint8Array(200))).toThrow(ResultStreamError);
+  });
+
   it("rejects cumulative Arrow payload beyond the browser result-input ceiling", () => {
     const parser = new ResultStreamParser(5);
 

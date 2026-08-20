@@ -1,4 +1,4 @@
-"""Single-analyst in-process request broker for the synthetic proof."""
+"""Single-analyst in-process request broker."""
 
 import secrets
 from collections.abc import Callable, Iterator

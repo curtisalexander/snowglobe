@@ -266,7 +266,7 @@ grants, resource-monitor state, and warehouse usage:
 | Empty result | `complete`; declared columns render with no rows |
 | Multiple batches, when the connector/account produces them at the 50-row cap | `complete`; all admitted rows render once and in order; otherwise record N/A and retain the deterministic local multi-batch test result |
 | More than 50 rows, 32 columns, 16-KiB cell, or 256-KiB Arrow/decoded | `failed`; no stream is published |
-| Mutation, multiple statements, unapproved object or function, stage syntax | `POLICY_REJECTED`; no Snowflake query-history entry |
+| Mutation, multiple statements, unapproved object, table-producing function, or stage syntax | `POLICY_REJECTED`; no Snowflake query-history entry |
 | Tool-supplied profile, role, warehouse, database, authenticator, or key path | closed-schema rejection; no Snowflake query-history entry |
 | Statement timeout or administrator-aborted pending query | only `failed`; no driver detail through MCP or ordinary output |
 | Cancellation | only `cancelled`; no result source; bounded Snowflake termination |

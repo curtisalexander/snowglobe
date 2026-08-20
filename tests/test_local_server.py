@@ -1,14 +1,16 @@
 from pytest import MonkeyPatch
+from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
 from snowglobe import local_server
 from snowglobe.local_server import create_app
 from snowglobe.mvp_limits import MVP_ARROW_LIMITS
-from snowglobe.runtime import runtime
+from snowglobe.runtime import create_runtime
 
 
 def test_local_server_shares_one_broker_between_mcp_and_viewer_routes() -> None:
-    app = create_app()
+    runtime = create_runtime()
+    app = create_app(runtime)
 
     assert app.state.runtime is runtime
     assert app.state.broker is runtime.broker
@@ -28,11 +30,11 @@ def test_local_launcher_binds_only_to_loopback(monkeypatch: MonkeyPatch) -> None
 
     assert local_server.main([]) == 0
 
-    assert invocation == {
-        "app": local_server.app,
-        "host": "127.0.0.1",
-        "port": 8000,
-    }
+    assert invocation["host"] == "127.0.0.1"
+    assert invocation["port"] == 8000
+    application = invocation["app"]
+    assert isinstance(application, Starlette)
+    assert application.state.broker is application.state.runtime.broker
 
 
 def test_local_launcher_fails_closed_with_only_one_config_file(

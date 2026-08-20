@@ -8,6 +8,7 @@ class FakeWorker {
   readonly messages: Array<Record<string, unknown>> = [];
   terminated = false;
   failOnChunk = false;
+  malformedViewport = false;
 
   postMessage(message: Record<string, unknown>): void {
     this.messages.push(message);
@@ -18,6 +19,14 @@ class FakeWorker {
         this.emit({ type: "destroyed" });
       } else if (message.type === "stream-chunk" && this.failOnChunk) {
         this.emit({ type: "failed" });
+      } else if (message.type === "viewport") {
+        this.emit({
+          type: "viewport",
+          sequence: message.sequence,
+          viewport: this.malformedViewport
+            ? { columns: [], rows: "invalid", hasMore: false }
+            : { columns: ["value"], rows: [["ok"]], hasMore: false },
+        });
       } else {
         if (message.type === "stream-end") this.emit({ type: "published" });
         this.emit({ type: "ack", sequence: message.sequence });
@@ -97,6 +106,33 @@ describe("database worker messages", () => {
     await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
 
     expect(underlying.messages.at(-1)?.type).toBe("destroy");
+    expect(underlying.terminated).toBe(true);
+  });
+
+  it("cancels an active input stream when the viewer closes", async () => {
+    const underlying = new FakeWorker();
+    let cancelled = false;
+    const input = new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const worker = startDatabaseWorker(() => undefined, () => underlying);
+    const loading = worker.load(input, 1024);
+    await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+
+    worker.destroy();
+
+    await expect(loading).rejects.toThrow("Database worker unavailable");
+    expect(cancelled).toBe(true);
+  });
+
+  it("rejects a malformed viewport reply", async () => {
+    const underlying = new FakeWorker();
+    underlying.malformedViewport = true;
+    const worker = startDatabaseWorker(() => undefined, () => underlying);
+
+    await expect(worker.viewport(0, 50)).rejects.toThrow("Database worker unavailable");
     expect(underlying.terminated).toBe(true);
   });
 });

@@ -121,8 +121,8 @@ chmod 600 /absolute/private/path/snowglobe.toml
 chmod 600 /absolute/private/path/snowglobe-test-key.p8
 ```
 
-See the [configuration reference](configuration.md) for the exact contract and file
-checks.
+See the [configuration reference](configuration.md) for the exact file contract and
+handling guidance.
 
 ## 4. Run preflight
 
@@ -367,7 +367,7 @@ host and are not granted by Snowglobe's MCP.
 ## 9. Continue the MVP campaign
 
 Run every case in the
-[connected matrix](constrained-mvp-runbook.md#10-required-connected-checks-and-evidence),
+[connected matrix](constrained-mvp-runbook.md#9-required-connected-checks-and-evidence),
 including policy rejection, overflow, timeout, cancellation, expiry, and restart.
 Copy the [value-free evidence template](mvp-evidence-template.md) outside the
 repository and retain only the fields it permits.

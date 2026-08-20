@@ -13,10 +13,9 @@ from snowglobe.mcp_gateway import create_server
 from snowglobe.mvp_limits import MVP_ARROW_LIMITS
 from snowglobe.result_api import create_app as create_result_api
 from snowglobe.runtime import Runtime, create_runtime
-from snowglobe.runtime import runtime as default_runtime
 
 
-def create_app(runtime: Runtime = default_runtime):
+def create_app(runtime: Runtime):
     """Serve MCP and viewer routes from the runtime that owns the local broker."""
 
     result_api = create_result_api(broker=runtime.broker, admission_limits=MVP_ARROW_LIMITS)
@@ -43,9 +42,6 @@ def create_app(runtime: Runtime = default_runtime):
     return application
 
 
-app = create_app()
-
-
 def main(argv: Sequence[str] | None = None) -> int:
     """Run one local analyst service without exposing it to the network."""
 
@@ -59,19 +55,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--profile", default="default")
     arguments = parser.parse_args(argv)
 
-    if arguments.connections is None and arguments.snowglobe_config is None:
-        application = app
-    else:
-        try:
+    try:
+        if arguments.connections is None and arguments.snowglobe_config is None:
+            runtime = create_runtime()
+        else:
             runtime = create_runtime(
                 connections_path=arguments.connections,
                 snowglobe_config_path=arguments.snowglobe_config,
                 profile_name=arguments.profile,
             )
-            application = create_app(runtime)
-        except Exception:
-            print("Snowglobe startup failed.", file=sys.stderr)
-            return 1
+        application = create_app(runtime)
+    except Exception:
+        print("Snowglobe startup failed.", file=sys.stderr)
+        return 1
 
     uvicorn.run(application, host="127.0.0.1", port=8000)
     return 0

@@ -5,7 +5,7 @@ from datetime import timedelta
 import pyarrow as pa
 import pytest
 
-from snowglobe.broker import InProcessBroker, RequestStatus
+from snowglobe.broker import InProcessBroker, RequestStatus, RequestUnavailable
 from snowglobe.executor import BackgroundQueryExecutor
 from snowglobe.sql_policy import QueryPolicyRejected
 
@@ -104,3 +104,27 @@ def test_background_failure_becomes_detail_free_failed_state(
     captured = capsys.readouterr()
     assert canary not in captured.out
     assert canary not in captured.err
+
+
+def test_close_rejects_later_submissions() -> None:
+    async def exercise() -> None:
+        broker = InProcessBroker()
+
+        def admit(_sql: str):
+            async def work(_request_id: str, mark_started) -> Source:
+                mark_started(None)
+                return Source()
+
+            return work
+
+        executor = BackgroundQueryExecutor(broker=broker, admit=admit)
+        await executor.close()
+
+        with pytest.raises(RequestUnavailable, match=r"^$"):
+            await executor.submit(
+                sql="select 1",
+                requested_ttl=timedelta(minutes=5),
+            )
+        assert broker.list_requests() == ()
+
+    asyncio.run(exercise())

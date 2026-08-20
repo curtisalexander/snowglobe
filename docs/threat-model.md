@@ -1,7 +1,7 @@
 # Single-analyst local threat model
 
-**Status:** Pre-connected MVP boundary assurance complete
-**Last updated:** August 19, 2026
+**Status:** Ready for connected MVP validation
+**Last updated:** August 20, 2026
 
 ## Scope and claim
 
