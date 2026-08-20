@@ -119,15 +119,13 @@ def test_stream_fails_closed_without_explicit_admission_limits() -> None:
     assert response.json() == {"error": "service_unavailable"}
 
 
-def test_list_open_and_cancel_local_requests() -> None:
+def test_list_and_open_local_requests() -> None:
     broker = InProcessBroker()
     item = submitted(broker)
     client = TestClient(result_app(broker))
 
     listed = client.get("/v1/requests")
     opened = client.get(f"/v1/requests/{item.request_id}")
-    cancelled = client.post(f"/v1/requests/{item.request_id}/cancel")
-    cancelled_again = client.post(f"/v1/requests/{item.request_id}/cancel")
 
     assert listed.status_code == 200
     assert listed.json() == {"requests": [opened.json()]}
@@ -136,14 +134,9 @@ def test_list_open_and_cancel_local_requests() -> None:
         "status": "complete",
         "expires_at": item.expires_at.isoformat(),
     }
-    assert cancelled.json()["status"] == "cancelled"
-    assert cancelled_again.json()["status"] == "cancelled"
-    for response in (listed, opened, cancelled, cancelled_again):
+    for response in (listed, opened):
         assert_security_headers(response)
-
-    unavailable_stream = client.get(f"/v1/requests/{item.request_id}/stream")
-    assert unavailable_stream.status_code == 404
-    assert unavailable_stream.json() == {"error": "not_found"}
+    assert client.post(f"/v1/requests/{item.request_id}/cancel").status_code == 404
 
 
 def test_unknown_request_is_not_reflected() -> None:
@@ -153,7 +146,6 @@ def test_unknown_request_is_not_reflected() -> None:
 
     responses = [
         client.get(f"/v1/requests/{canary}"),
-        client.post(f"/v1/requests/{canary}/cancel"),
         client.get(f"/v1/requests/{canary}/stream"),
     ]
 

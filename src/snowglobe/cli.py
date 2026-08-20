@@ -37,7 +37,6 @@ def _parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
 
     submit = commands.add_parser("submit", help="submit SQL read from standard input")
-    submit.add_argument("--purpose", required=True)
     submit.add_argument("--ttl", required=True, type=int)
 
     status = commands.add_parser("status", help="poll one opaque request ID")
@@ -61,14 +60,13 @@ async def _run(arguments: argparse.Namespace, sql: str) -> QueryReceipt | QueryS
             requested_ttl = timedelta(seconds=arguments.ttl)
         except OverflowError:
             requested_ttl = timedelta(0)
-        if not sql or not arguments.purpose or requested_ttl <= timedelta(0):
+        if not sql or requested_ttl <= timedelta(0):
             return rejected_receipt(ReasonCode.INVALID_REQUEST)
         try:
             content = await _invoke(
                 SUBMIT_TOOL_NAME,
                 {
                     "sql": sql,
-                    "purpose": arguments.purpose,
                     "requested_ttl": arguments.ttl,
                 },
             )

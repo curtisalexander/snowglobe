@@ -13,7 +13,6 @@ from snowglobe.mvp_limits import (
     MVP_STATEMENT_TIMEOUT_SECONDS,
 )
 from snowglobe.private_key import load_private_key
-from snowglobe.secure_file import SecureFileError, read_secure_file
 
 SCHEMA_VERSION = 1
 SNOWGLOBE_ROOT_FIELDS = frozenset({"schema_version", "profiles"})
@@ -78,7 +77,7 @@ def load_snowflake_profile(path: Path, profile_name: str) -> SnowflakeProfile:
     """Load reviewed fields from one native Snowflake connection definition."""
 
     try:
-        document = tomllib.loads(read_secure_file(path).decode("utf-8"))
+        document = tomllib.loads(path.read_text(encoding="utf-8"))
         profile = document[profile_name]
         if not isinstance(profile, dict):
             raise ConfigurationError
@@ -88,7 +87,6 @@ def load_snowflake_profile(path: Path, profile_name: str) -> SnowflakeProfile:
     except (
         KeyError,
         OSError,
-        SecureFileError,
         tomllib.TOMLDecodeError,
         UnicodeError,
         TypeError,
@@ -111,7 +109,7 @@ def load_snowglobe_profile(path: Path, profile_name: str) -> SnowglobeProfile:
     """Load one exact Snowglobe-owned SQL policy profile."""
 
     try:
-        document = tomllib.loads(read_secure_file(path).decode("utf-8"))
+        document = tomllib.loads(path.read_text(encoding="utf-8"))
         _require_exact_fields(document, SNOWGLOBE_ROOT_FIELDS)
         if document["schema_version"] != SCHEMA_VERSION:
             raise ConfigurationError
@@ -126,7 +124,6 @@ def load_snowglobe_profile(path: Path, profile_name: str) -> SnowglobeProfile:
     except (
         KeyError,
         OSError,
-        SecureFileError,
         tomllib.TOMLDecodeError,
         UnicodeError,
         TypeError,

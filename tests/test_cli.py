@@ -11,14 +11,12 @@ def test_submit_reads_sql_from_stdin_and_prints_only_closed_receipt(
     capsys: CaptureFixture[str],
 ) -> None:
     sql_canary = "PRIVATE_SQL_CANARY"
-    purpose_canary = "PRIVATE_PURPOSE_CANARY"
     request_id = "abcdefghijklmnopqrstuvwx"
 
     async def invoke(name: str, arguments: dict[str, object]) -> dict[str, object]:
         assert name == "submit_read_query"
         assert arguments == {
             "sql": sql_canary,
-            "purpose": purpose_canary,
             "requested_ttl": 300,
         }
         return {"status": "accepted", "request_id": request_id, "reason_code": "NONE"}
@@ -26,7 +24,7 @@ def test_submit_reads_sql_from_stdin_and_prints_only_closed_receipt(
     monkeypatch.setattr(cli, "_invoke", invoke)
     monkeypatch.setattr(cli.sys, "stdin", StringIO(sql_canary))
 
-    assert cli.main(["submit", "--purpose", purpose_canary, "--ttl", "300"]) == 0
+    assert cli.main(["submit", "--ttl", "300"]) == 0
     captured = capsys.readouterr()
     assert json.loads(captured.out) == {
         "status": "accepted",
@@ -35,7 +33,6 @@ def test_submit_reads_sql_from_stdin_and_prints_only_closed_receipt(
     }
     assert captured.err == ""
     assert sql_canary not in captured.out
-    assert purpose_canary not in captured.out
 
 
 def test_status_prints_only_closed_receipt(
@@ -69,7 +66,7 @@ def test_transport_failure_fails_closed(
     monkeypatch.setattr(cli, "_invoke", fail)
     monkeypatch.setattr(cli.sys, "stdin", StringIO("PRIVATE_SQL_CANARY"))
 
-    assert cli.main(["submit", "--purpose", "PRIVATE_PURPOSE", "--ttl", "300"]) == 0
+    assert cli.main(["submit", "--ttl", "300"]) == 0
     captured = capsys.readouterr()
     assert json.loads(captured.out)["reason_code"] == "SERVICE_UNAVAILABLE"
     assert captured.err == ""
@@ -86,7 +83,7 @@ def test_invalid_submission_is_rejected_without_contacting_the_service(
     monkeypatch.setattr(cli, "_invoke", invoke)
     monkeypatch.setattr(cli.sys, "stdin", StringIO(""))
 
-    assert cli.main(["submit", "--purpose", "test", "--ttl", "300"]) == 0
+    assert cli.main(["submit", "--ttl", "300"]) == 0
     receipt = json.loads(capsys.readouterr().out)
     assert receipt["reason_code"] == "INVALID_REQUEST"
 
@@ -126,7 +123,7 @@ def test_malformed_response_with_result_data_fails_closed(
     monkeypatch.setattr(cli, "_invoke", malformed)
     monkeypatch.setattr(cli.sys, "stdin", StringIO("PRIVATE_SQL_CANARY"))
 
-    assert cli.main(["submit", "--purpose", "PRIVATE_PURPOSE", "--ttl", "300"]) == 0
+    assert cli.main(["submit", "--ttl", "300"]) == 0
     captured = capsys.readouterr()
     assert json.loads(captured.out)["reason_code"] == "SERVICE_UNAVAILABLE"
     assert captured.err == ""

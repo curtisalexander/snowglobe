@@ -36,7 +36,6 @@ class ControlPlane:
         self,
         *,
         sql: str,
-        purpose: str,
         requested_ttl: timedelta,
     ) -> QueryReceipt:
         if self._executor is None:
@@ -44,7 +43,6 @@ class ControlPlane:
         try:
             request = await self._executor.submit(
                 sql=sql,
-                purpose=purpose,
                 requested_ttl=requested_ttl,
             )
         except QueryPolicyRejected:

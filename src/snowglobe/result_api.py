@@ -11,7 +11,7 @@ from starlette.routing import Route
 from snowglobe.arrow_stream import (
     ArrowAdmissionLimits,
     ArrowBatchSource,
-    admitted_ipc_chunks,
+    ipc_chunks,
 )
 from snowglobe.broker import (
     InProcessBroker,
@@ -28,10 +28,7 @@ FRAME_HEADER = struct.Struct(">BQ")
 
 SECURITY_HEADERS = {
     "Cache-Control": "no-store",
-    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
-    "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
 }
 
 
@@ -56,16 +53,6 @@ async def list_requests(request: Request) -> Response:
 async def open_request(request: Request) -> Response:
     try:
         item = request.app.state.broker.get_request(request.path_params["request_id"])
-    except RequestUnavailable:
-        return _not_found()
-    except Exception:
-        return _unavailable()
-    return JSONResponse(_serialize_view(item), headers=SECURITY_HEADERS)
-
-
-async def cancel_request(request: Request) -> Response:
-    try:
-        item = request.app.state.broker.cancel(request.path_params["request_id"])
     except RequestUnavailable:
         return _not_found()
     except Exception:
@@ -108,7 +95,7 @@ async def _framed_stream(
 
     yield STREAM_MAGIC
     try:
-        async for chunk in admitted_ipc_chunks(source, admission_limits):
+        async for chunk in ipc_chunks(source, admission_limits.maximum_arrow_bytes):
             if broker.open_source(request_id) is not source:
                 return
             yield FRAME_HEADER.pack(ARROW_FRAME, len(chunk)) + chunk
@@ -153,7 +140,6 @@ def create_app(
             Route("/healthz", health, methods=["GET"]),
             Route("/v1/requests", list_requests, methods=["GET"]),
             Route("/v1/requests/{request_id}", open_request, methods=["GET"]),
-            Route("/v1/requests/{request_id}/cancel", cancel_request, methods=["POST"]),
             Route("/v1/requests/{request_id}/stream", stream_request, methods=["GET"]),
         ]
     )

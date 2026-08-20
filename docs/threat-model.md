@@ -13,16 +13,16 @@ reviews completed results in the local viewer.
 The claim is narrow: Snowglobe's MCP, CLI, and Pi tool output contain only the closed
 submission and lifecycle contracts in `PLAN.md`. Query-result bytes and rich metadata
 do not travel through these adapters. The local viewer backend is a separate
-application path, but it is not protected from other processes running as the analyst.
+application path. Enabling the MCP does not grant an agent access to that path.
 
 ## Components and allowed data
 
 | Component | Data allowed | Main controls |
 |---|---|---|
-| Coding agent and MCP/CLI/Pi adapter | Submitted SQL, purpose, TTL, opaque request ID, fixed reason, coarse lifecycle | Closed schemas, sanitized exceptions, independent Pi validation, no result reader |
+| Coding agent and MCP/CLI/Pi adapter | Submitted SQL, TTL, opaque request ID, fixed reason, coarse lifecycle | Closed schemas, sanitized exceptions, independent Pi validation, no result reader |
 | Local Snowglobe runtime | Query input, policy decision, private execution handle, opaque ID, lifecycle, expiry | One loopback process, value-free logs, request-scoped cleanup |
-| Snowflake | Governed SQL and configured credentials | Explicit connector arguments, least-privileged role, AST policy, independent limits |
-| Local viewer backend | Request lifecycle and admitted Arrow result | Loopback binding, no-store/security headers, stream only complete requests |
+| Snowflake | Governed SQL and configured credentials | Explicit connector arguments, read-only role, approved views, independent limits |
+| Local viewer backend | Request lifecycle and admitted Arrow result | Loopback binding, no-store, stream only complete requests |
 | Browser worker | Provisional Arrow and in-memory DuckDB-Wasm table | Failure-atomic publication, memory limits, termination on failure |
 | Browser main thread | Request list and bounded viewport/aggregate responses | Escaped rendering, no persistence/telemetry, bounded copies |
 
@@ -38,9 +38,9 @@ application path, but it is not protected from other processes running as the an
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-The local operating-system user boundary is trusted. An attacker who can execute as
-the analyst, read the browser, or control the coding-agent host is outside the product
-boundary and may access viewer data. Loopback prevents ordinary remote clients from
+The local operating-system user boundary is trusted. Browser, screenshot, shell, and
+direct HTTP access are separate agent capabilities controlled by the agent host, not
+capabilities granted by Snowglobe's MCP. Loopback prevents ordinary remote clients from
 connecting; it does not distinguish the browser from another local process.
 
 ## Primary threats and controls
@@ -49,7 +49,7 @@ connecting; it does not distinguish the browser from another local process.
 |---|---|
 | Result values or errors leak through MCP, CLI, or Pi | Closed result schemas; lifecycle-only polling; bounded/discarded process output; independent Pi receipt validation; final exception sanitization; canary scans |
 | Service is exposed to the network | Supported launcher and Vite bind to `127.0.0.1`; documentation forbids `0.0.0.0` |
-| SQL mutates data or escapes approved objects | One Snowflake `SELECT` AST; object/function allowlists; fixed role/warehouse; least privilege |
+| SQL mutates data or escapes approved objects | One parsed read query; approved views; fixed read-only role/warehouse |
 | Expensive or oversized work exhausts resources | Statement/queue timeouts; concurrency cap; server row/column/cell/Arrow/memory limits |
 | Partial stream is mistaken for a complete result | Terminal framing marker; provisional DuckDB table; destroy state if completion is absent |
 | Data persists in browser or telemetry | No IndexedDB/OPFS/service-worker result cache; no third-party telemetry; `no-store` headers |
@@ -82,5 +82,4 @@ connecting; it does not distinguish the browser from another local process.
 - viewer list/lookup behavior and complete-only stream access;
 - cancellation, expiry, source failure, and final-batch overflow tests;
 - local launcher and development server loopback configuration;
-- no browser result storage, external readers, or unbounded main-thread copy; and
 - a real MCP Streamable HTTP round trip, including a CLI client call.

@@ -21,7 +21,7 @@ class Source:
 def test_control_plane_submits_and_polls_without_result_data() -> None:
     broker = InProcessBroker()
 
-    def admit(_sql: str, _purpose: str):
+    def admit(_sql: str):
         async def work(_request_id: str, mark_started) -> Source:
             mark_started(None)
             return Source()
@@ -36,7 +36,6 @@ def test_control_plane_submits_and_polls_without_result_data() -> None:
     async def exercise() -> None:
         submitted = await control.submit(
             sql="select 'PRIVATE_RESULT_VALUE'",
-            purpose="PRIVATE_PURPOSE",
             requested_ttl=timedelta(minutes=1),
         )
         while control.status(submitted.request_id).status == "pending":
@@ -59,7 +58,7 @@ def test_control_plane_submits_and_polls_without_result_data() -> None:
 def test_control_plane_maps_policy_and_service_failures_to_fixed_receipts() -> None:
     broker = InProcessBroker()
 
-    def reject(_sql: str, _purpose: str):
+    def reject(_sql: str):
         raise QueryPolicyRejected
 
     policy_control = ControlPlane(
@@ -71,12 +70,10 @@ def test_control_plane_maps_policy_and_service_failures_to_fixed_receipts() -> N
     async def exercise() -> None:
         policy = await policy_control.submit(
             sql="PRIVATE_SQL",
-            purpose="PRIVATE_PURPOSE",
             requested_ttl=timedelta(minutes=1),
         )
         unavailable = await unavailable_control.submit(
             sql="PRIVATE_SQL",
-            purpose="PRIVATE_PURPOSE",
             requested_ttl=timedelta(minutes=1),
         )
         assert policy.reason_code == "POLICY_REJECTED"

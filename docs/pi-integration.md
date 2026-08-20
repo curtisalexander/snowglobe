@@ -5,15 +5,9 @@ Snowglobe's checks when upgrading it.
 
 Pi intentionally does not support MCP. Its supported equivalent is a TypeScript
 extension that registers model-callable tools. Snowglobe therefore ships as a
-[Pi package](https://pi.dev/docs/latest/packages) containing:
-
-- a [Pi extension](https://pi.dev/docs/latest/extensions) that registers
-  `submit_read_query` and `get_query_status`; and
-- a [Pi skill](https://pi.dev/docs/latest/skills) that supplies the safe operating
-  workflow through progressive disclosure.
-
-The extension is the important part. A skill alone would ask the model to construct
-shell commands and interpret their output. The extension instead provides strict
+[Pi package](https://pi.dev/docs/latest/packages) containing a
+[Pi extension](https://pi.dev/docs/latest/extensions) that registers
+`submit_read_query` and `get_query_status`. The extension provides strict
 input schemas, sends SQL through stdin, validates the CLI's JSON independently, and
 returns only the closed Snowglobe receipts.
 
@@ -55,9 +49,8 @@ Do not put the profile path, role, warehouse, key, or other Snowflake configurat
 Pi settings.
 
 Pi packages execute arbitrary code with the current user's permissions. Review
-[`integrations/pi/extensions/`](../integrations/pi/extensions) and the bundled
-[`SKILL.md`](../integrations/pi/skills/snowglobe/SKILL.md) before installation, as Pi's
-own package documentation recommends.
+[`integrations/pi/extensions/`](../integrations/pi/extensions) before installation, as
+Pi's own package documentation recommends.
 
 ## Install
 
@@ -116,27 +109,23 @@ use it for connected evidence unless that exact checkout was reviewed and record
 For extension development from this checkout:
 
 ```bash
-pi -e ./integrations/pi/extensions/index.ts \
-  --skill ./integrations/pi/skills/snowglobe
+pi -e ./integrations/pi/extensions/index.ts
 ```
 
 Pi auto-discovers installed package resources at startup. In an already-running Pi
-session, use `/reload` after changing a local extension. Use `/skill:snowglobe` to
-force-load the workflow instructions; normally Pi loads them when the request matches
-the skill description.
+session, use `/reload` after changing a local extension.
 
 ## Use
 
 Ask Pi:
 
 > Use Snowglobe to submit `SELECT * FROM
-> YOUR_TEST_DATABASE.YOUR_TEST_SCHEMA.YOUR_APPROVED_VIEW` for the purpose
-> `Constrained Snowglobe MVP canary check`, with a TTL of 300 seconds. Poll until
+> YOUR_TEST_DATABASE.YOUR_TEST_SCHEMA.YOUR_APPROVED_VIEW` with a TTL of 300 seconds. Poll until
 > terminal and report only the receipts. Do not access the viewer or result stream.
 
 Pi should call only:
 
-1. `submit_read_query(sql, purpose, requested_ttl)`; then
+1. `submit_read_query(sql, requested_ttl)`; then
 2. `get_query_status(request_id)` until terminal.
 
 Submission tool content is exactly:
@@ -177,7 +166,6 @@ return result bytes or rich result metadata.
 | Symptom | Check |
 |---|---|
 | Tools are missing | Run `pi list`, confirm the package is enabled with `pi config`, then use `/reload` or restart Pi. |
-| Skill is not loaded | Invoke `/skill:snowglobe` or confirm skills are enabled in `pi config`. |
 | Submission returns `SERVICE_UNAVAILABLE` | Confirm `snowglobe-local` is running on its fixed loopback endpoint and was launched with the intended profile. Do not ask Pi to inspect server logs or credentials. |
 | First call is slow | The Git-installed package may be creating its package-local locked Python environment with `uv` for the first time. |
 | `uv` is not found | Install `uv` on `PATH`; do not point the extension at an unreviewed wrapper. |

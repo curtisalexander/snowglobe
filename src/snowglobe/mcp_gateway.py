@@ -25,7 +25,7 @@ from snowglobe.runtime import runtime
 
 SUBMIT_TOOL_NAME = "submit_read_query"
 STATUS_TOOL_NAME = "get_query_status"
-INPUT_FIELDS = frozenset({"sql", "purpose", "requested_ttl"})
+INPUT_FIELDS = frozenset({"sql", "requested_ttl"})
 STATUS_INPUT_FIELDS = frozenset({"request_id"})
 REQUEST_ID_PATTERN = "^[A-Za-z0-9_-]{20,32}$"
 
@@ -39,10 +39,9 @@ SUBMIT_READ_QUERY = Tool(
         "type": "object",
         "properties": {
             "sql": {"type": "string", "minLength": 1},
-            "purpose": {"type": "string", "minLength": 1},
             "requested_ttl": {"type": "integer", "minimum": 1},
         },
-        "required": ["sql", "purpose", "requested_ttl"],
+        "required": ["sql", "requested_ttl"],
         "additionalProperties": False,
     },
     output_schema={
@@ -113,7 +112,6 @@ async def _call_tool(control: ControlPlane, params: CallToolRequestParams) -> Ca
                 return _receipt_result(rejected_receipt(ReasonCode.INVALID_REQUEST))
             receipt = await control.submit(
                 sql=arguments["sql"],
-                purpose=arguments["purpose"],
                 requested_ttl=timedelta(seconds=arguments["requested_ttl"]),
             )
             return _receipt_result(receipt)
@@ -166,8 +164,6 @@ def _valid_arguments(arguments: dict[str, Any] | None) -> bool:
     if (
         not isinstance(arguments["sql"], str)
         or not arguments["sql"]
-        or not isinstance(arguments["purpose"], str)
-        or not arguments["purpose"]
         or type(arguments["requested_ttl"]) is not int
         or arguments["requested_ttl"] < 1
     ):

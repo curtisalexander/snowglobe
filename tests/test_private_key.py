@@ -55,15 +55,3 @@ def test_rejects_key_failures_without_detail(tmp_path: Path, case: str) -> None:
         load_private_key(path)
 
     assert str(caught.value) == ""
-
-
-@pytest.mark.parametrize("mode", [0o200, 0o604, 0o640, 0o700])
-def test_rejects_unsafe_private_key_permissions(tmp_path: Path, mode: int) -> None:
-    path = tmp_path / "sensitive-key-name"
-    path.write_bytes(b"not a key")
-    path.chmod(mode)
-
-    with pytest.raises(PrivateKeyError) as caught:
-        load_private_key(path)
-
-    assert str(caught.value) == ""

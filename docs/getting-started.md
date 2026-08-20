@@ -11,9 +11,8 @@ authoritative.
 
 ## 1. Prerequisites and installation
 
-Use Linux, macOS, or native Windows 10/11. On Windows, keep the configuration and key
-on a local NTFS volume; FAT, exFAT, incompatible network shares, and reparse-point
-paths cannot provide the reviewed credential-file checks and fail closed.
+Use Linux, macOS, or native Windows 10/11. Snowglobe relies on the analyst and
+operating system to manage file access.
 
 Install Python 3.12, `uv`, Node.js 22.12 or newer, and npm. From a fresh clone:
 
@@ -113,30 +112,14 @@ The same profile name selects the Snowflake connection and Snowglobe policy. The
 warehouse, database, authenticator, key path, and allowlist are launcher-owned. Never
 put them in a prompt or MCP tool arguments.
 
-Make all three files owner-only regular files:
+Keep all three files in an access-controlled location outside the repository and
+agent-visible workspaces. Snowglobe does not inspect file ownership or permissions.
 
 ```bash
 chmod 600 /absolute/private/path/connections.toml
 chmod 600 /absolute/private/path/snowglobe.toml
 chmod 600 /absolute/private/path/snowglobe-test-key.p8
 ```
-
-On Windows, create them on local NTFS storage, then remove inherited access and grant
-your current account read/write access. Run this from PowerShell after setting the three
-paths:
-
-```powershell
-$config = "$env:USERPROFILE\.snowglobe\connections.toml"
-$policy = "$env:USERPROFILE\.snowglobe\snowglobe.toml"
-$key = "$env:USERPROFILE\.snowglobe\snowglobe-test-key.p8"
-$account = "$env:USERDOMAIN\$env:USERNAME"
-icacls $config /inheritance:r /grant:r "${account}:(R,W)"
-icacls $policy /inheritance:r /grant:r "${account}:(R,W)"
-icacls $key /inheritance:r /grant:r "${account}:(R,W)"
-```
-
-Snowglobe verifies the owner SID and ACL on the opened file handle and rejects all
-reparse points. Local System and Administrators remain privileged, like POSIX root.
 
 See the [configuration reference](configuration.md) for the exact contract and file
 checks.
@@ -307,9 +290,8 @@ pi list
 ```
 
 Restart Pi and confirm `submit_read_query` and `get_query_status` are available. The
-package registers typed tools that invoke Snowglobe's fixed-loopback, result-free CLI;
-it also bundles workflow guidance that Pi discovers as the `snowglobe` skill. The
-runtime must remain running. See the [complete Pi integration guide](pi-integration.md)
+package registers typed tools that invoke Snowglobe's fixed-loopback, result-free CLI.
+The runtime must remain running. See the [complete Pi integration guide](pi-integration.md)
 for project-local installation, updates, removal, troubleshooting, and security detail.
 Record `SNOWGLOBE_REF` as the Pi package revision in the private value-free evidence.
 
@@ -321,27 +303,25 @@ debugging the Pi adapter. Keep `snowglobe-local` running, then pipe SQL through 
 ```bash
 printf '%s\n' 'SELECT * FROM YOUR_TEST_DATABASE.YOUR_TEST_SCHEMA.YOUR_APPROVED_VIEW' \
   | uv run snowglobe submit \
-      --purpose "Constrained Snowglobe MVP canary check" \
       --ttl 300
 ```
 
 On Windows PowerShell:
 
 ```powershell
-'SELECT * FROM YOUR_TEST_DATABASE.YOUR_TEST_SCHEMA.YOUR_APPROVED_VIEW' | uv run snowglobe submit --purpose "Constrained Snowglobe MVP canary check" --ttl 300
+'SELECT * FROM YOUR_TEST_DATABASE.YOUR_TEST_SCHEMA.YOUR_APPROVED_VIEW' | uv run snowglobe submit --ttl 300
 ```
 
 Retain only the returned opaque ID and run
 `uv run snowglobe status '<opaque-request-id>'` to poll it. The CLI deliberately has no
 result, viewer, configuration, or cancellation commands. SQL is stdin-only so it is not
-a `snowglobe` process argument. Do not have an agent call the `/v1` viewer routes,
-inspect the browser, or use shell HTTP clients to read the result stream.
+a `snowglobe` process argument.
 
 ## 7. Verify the control surface
 
 Native MCP clients must see exactly:
 
-- `submit_read_query(sql, purpose, requested_ttl)`
+- `submit_read_query(sql, requested_ttl)`
 - `get_query_status(request_id)`
 
 It must not advertise Snowglobe resources, prompts, result readers, cancellation
@@ -364,10 +344,9 @@ they must originate in the administrator-approved view.
 
 > Use Snowglobe to submit this governed read query:
 > `SELECT * FROM YOUR_TEST_DATABASE.YOUR_TEST_SCHEMA.YOUR_APPROVED_VIEW`.
-> Use purpose `Constrained Snowglobe MVP canary check` and a TTL of 300 seconds.
+> Use a TTL of 300 seconds.
 > Return the opaque submission receipt, poll the request with Snowglobe until it is
-> terminal, and report only the lifecycle receipt. Do not access the viewer backend,
-> browser, result stream, screenshots, or local Snowflake configuration.
+> terminal, and report only the lifecycle receipt.
 
 Expected agent-visible behavior:
 
@@ -381,10 +360,9 @@ non-sensitive canary values and columns should appear there and nowhere in the a
 conversation. Reload or close the page after inspection to destroy browser worker
 state.
 
-Prompt instructions are usability guidance, not a security boundary. An agent with
-arbitrary same-host browser, shell, or HTTP access may still reach loopback viewer
-routes; Snowglobe guarantees only that its MCP tools do not create a result-bearing
-channel.
+For this experiment, enable Snowglobe's MCP tools without separately enabling browser,
+screenshot, shell, or direct HTTP tools. Those capabilities are controlled by the agent
+host and are not granted by Snowglobe's MCP.
 
 ## 9. Continue the MVP campaign
 

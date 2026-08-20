@@ -1,13 +1,9 @@
-import os
-import sys
-from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from snowglobe import secure_file
 from snowglobe.configuration import (
     ConfigurationError,
     build_connector_arguments,
@@ -155,60 +151,5 @@ def test_rejects_invalid_snowglobe_config_without_detail(tmp_path: Path, config:
 
     with pytest.raises(ConfigurationError) as caught:
         load_snowglobe_profile(path, "default")
-
-    assert str(caught.value) == ""
-
-
-@pytest.mark.parametrize("mode", [0o200, 0o601, 0o640, 0o700])
-@pytest.mark.parametrize("loader", [load_snowflake_profile, load_snowglobe_profile])
-def test_rejects_unsafe_configuration_permissions(
-    tmp_path: Path,
-    mode: int,
-    loader: Callable[[Path, str], object],
-) -> None:
-    path = tmp_path / "sensitive-name.toml"
-    contents = VALID_CONNECTIONS if loader is load_snowflake_profile else VALID_SNOWGLOBE_CONFIG
-    path.write_text(contents, encoding="utf-8")
-    path.chmod(mode)
-
-    with pytest.raises(ConfigurationError) as caught:
-        loader(path, "default")
-
-    assert str(caught.value) == ""
-
-
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX ownership test")
-def test_rejects_configuration_not_owned_by_current_user(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    path = tmp_path / "sensitive-name.toml"
-    write_secure(path, VALID_CONNECTIONS)
-    monkeypatch.setattr(secure_file.os, "geteuid", lambda: path.stat().st_uid + 1)
-
-    with pytest.raises(ConfigurationError) as caught:
-        load_snowflake_profile(path, "default")
-
-    assert str(caught.value) == ""
-
-
-def test_rejects_configuration_symlink(tmp_path: Path) -> None:
-    target = tmp_path / "target.toml"
-    write_secure(target, VALID_SNOWGLOBE_CONFIG)
-    path = tmp_path / "sensitive-name.toml"
-    path.symlink_to(target)
-
-    with pytest.raises(ConfigurationError) as caught:
-        load_snowglobe_profile(path, "default")
-
-    assert str(caught.value) == ""
-
-
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX FIFO test")
-def test_rejects_configuration_fifo_without_blocking(tmp_path: Path) -> None:
-    path = tmp_path / "sensitive-name.toml"
-    os.mkfifo(path, mode=0o600)
-
-    with pytest.raises(ConfigurationError) as caught:
-        load_snowflake_profile(path, "default")
 
     assert str(caught.value) == ""

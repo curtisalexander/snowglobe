@@ -52,9 +52,8 @@ requests and results.
 
 Most of the architecture follows from three ordering guarantees:
 
-1. **MCP acceptance waits for control.** `accepted` is returned only after policy
-   authorization, pending registration, connection/cursor creation, private cursor
-   registration, and background-task startup.
+1. **MCP acceptance waits for registration.** `accepted` is returned only after policy
+   authorization, pending registration, and successful background-task scheduling.
 2. **Broker completion waits for admission and cleanup.** `complete` is published only
    after all Arrow batches pass every limit and the request-scoped cursor and connection
    have closed.
@@ -78,8 +77,8 @@ boundary. The implementation assumes all of the following:
   returns only compact receipt JSON with empty tool details.
 - Profile, role, warehouse, database, authenticator, key path, and allowlisted views
   come only from local launcher configuration, never tool input.
-- SQL authorization is a recursive SQLGlot AST allowlist, not parsing alone and not a
-  first-keyword or regular-expression check.
+- SQL authorization parses one read query and recursively verifies every external
+  relation against configured views before applying the row cap.
 - Arrow retrieval and admission remain incremental. Do not add `fetchall()`,
   `fetch_arrow_all()`, `to_pylist()`, complete result concatenation, or row dictionaries.
 - Result bytes travel only through loopback viewer routes into the browser worker.
@@ -99,7 +98,7 @@ The accepted decisions behind these rules are primarily
 snowglobe/
 ├── src/snowglobe/          Python runtime, policy, execution, broker, HTTP
 ├── apps/viewer/src/        Svelte UI, stream parser, worker, DuckDB-Wasm
-├── integrations/pi/        Native Pi tools, process boundary, workflow skill
+├── integrations/pi/        Native Pi tools and process boundary
 ├── tests/                  Backend and cross-boundary pytest suite
 ├── docs/decisions/         Accepted architecture decisions
 ├── docs/                   Runbooks, threat model, and implementation guides
@@ -153,15 +152,14 @@ preflight, launch, client, prompt, and shutdown procedure in the
 | [`cli.py`](../src/snowglobe/cli.py) | Result-free shell adapter over the running loopback MCP service |
 | [`contracts.py`](../src/snowglobe/contracts.py) | Closed Pydantic receipt and lifecycle types |
 | [`configuration.py`](../src/snowglobe/configuration.py) | Exact TOML profile schema and connector argument allowlist |
-| [`secure_file.py`](../src/snowglobe/secure_file.py) | Owner-only, no-final-symlink file reads |
 | [`private_key.py`](../src/snowglobe/private_key.py) | PEM/DER RSA parsing and PKCS#8 conversion |
-| [`sql_policy.py`](../src/snowglobe/sql_policy.py) | Recursive SQL authorization and server-owned row cap |
+| [`sql_policy.py`](../src/snowglobe/sql_policy.py) | One read query, approved views, and server-owned row cap |
 | [`executor.py`](../src/snowglobe/executor.py) | Generic async admission/startup/expiry/publication ordering |
 | [`snowflake_executor.py`](../src/snowglobe/snowflake_executor.py) | Real connector work, one-execution lock, incremental Arrow retrieval |
 | [`snowflake.py`](../src/snowglobe/snowflake.py) | Request-scoped connection and cursor context manager |
 | [`broker.py`](../src/snowglobe/broker.py) | Request state, private cursor association, source publication, cancellation, expiry |
 | [`arrow_stream.py`](../src/snowglobe/arrow_stream.py) | Arrow schema/cell/row/byte admission and incremental IPC serialization |
-| [`result_api.py`](../src/snowglobe/result_api.py) | Viewer metadata, cancellation, and failure-atomic framed streaming routes |
+| [`result_api.py`](../src/snowglobe/result_api.py) | Viewer metadata and failure-atomic framed streaming routes |
 | [`mvp_limits.py`](../src/snowglobe/mvp_limits.py) | Shared backend MVP budgets |
 | [`preflight.py`](../src/snowglobe/preflight.py) | Value-free local and connected profile checks |
 
@@ -173,7 +171,6 @@ preflight, launch, client, prompt, and shutdown procedure in the
 | [`index.ts`](../integrations/pi/extensions/index.ts) | Exact native tool definitions and closed tool results |
 | [`contracts.ts`](../integrations/pi/extensions/contracts.ts) | Independent exact JSON receipt validation and fixed failures |
 | [`process.ts`](../integrations/pi/extensions/process.ts) | No-shell subprocess, stdin SQL, cancellation, timeout, and bounded output |
-| [`SKILL.md`](../integrations/pi/skills/snowglobe/SKILL.md) | Progressive-disclosure workflow guidance, not enforcement |
 
 ### Viewer ownership
 
@@ -243,13 +240,8 @@ other native profiles and fields may remain but are not forwarded.
 matching profile from a separate, versioned `snowglobe.toml`. Its exact policy schema
 contains `allowed_views`; unknown or missing fields fail.
 
-Before parsing either the TOML or private key, [`read_secure_file()`](../src/snowglobe/secure_file.py):
-
-1. opens the path without following a final POSIX symlink or Windows reparse point;
-2. verifies it is a regular file owned by the effective user or current user SID;
-3. accepts only owner read/write bits (`0400` or `0600`) on POSIX, or an ACL limited
-   to the user and Windows-equivalent privileged host principals; and
-4. reads from the already-verified descriptor.
+Configuration uses normal reads from the analyst-supplied paths. Snowglobe relies on
+the analyst and operating system for file access policy.
 
 [`load_private_key()`](../src/snowglobe/private_key.py) parses an unencrypted PEM or DER
 RSA key and converts it in memory to the unencrypted PKCS#8 DER bytes expected by the
@@ -281,7 +273,6 @@ Submission input is exactly:
 ```json
 {
   "sql": "SELECT * FROM APPROVED_DB.APPROVED_SCHEMA.APPROVED_VIEW",
-  "purpose": "Explain why this governed query is needed",
   "requested_ttl": 300
 }
 ```
@@ -297,9 +288,7 @@ An accepted result is exactly:
 ```
 
 Status input contains only `request_id`; status output contains only `request_id` and
-one coarse state. Both schemas set `additionalProperties: false`. The `purpose` value
-is passed through the generic admission seam but is intentionally not persisted,
-logged, sent to Snowflake, or returned.
+one coarse state. Both schemas set `additionalProperties: false`.
 
 Every public exception boundary maps details to a fixed receipt. Invalid status input
 gets a fresh opaque ID plus `not_found`, rather than reflecting malformed input.
@@ -321,15 +310,13 @@ stdout, and honors cancellation and fixed timeouts. The extension then validates
 CLI result independently against exact TypeScript receipt contracts. Any process or
 validation failure becomes a fixed closed receipt.
 
-The bundled [`snowglobe` skill](../integrations/pi/skills/snowglobe/SKILL.md) tells Pi
-when and how to use the tools and directs result inspection back to the analyst. It
-does not provide the capability or enforce isolation. See [ADR 0014](decisions/0014-pi-extension-package.md)
-and the [Pi integration guide](pi-integration.md).
+See [ADR 0014](decisions/0014-pi-extension-package.md) and the
+[Pi integration guide](pi-integration.md).
 
 ## 7. SQL authorization and rewriting
 
-[`SnowflakeSqlPolicy.authorize()`](../src/snowglobe/sql_policy.py) is authorization, not
-just syntax validation:
+[`SnowflakeSqlPolicy.authorize()`](../src/snowglobe/sql_policy.py) applies the small
+application query policy:
 
 ```text
 submitted SQL
@@ -338,19 +325,13 @@ submitted SQL
 parse exactly one Snowflake statement
     │
     ▼
-require a Select root and recursively allowlisted AST nodes
+require one read-query root
     │
-    ├── reject every function
-    ├── resolve CTE references with SQLGlot scope analysis
-    ├── require external DATABASE.SCHEMA.VIEW allowlist matches
-    ├── validate qualified column aliases
-    └── require literal non-negative LIMIT/FETCH/OFFSET
+    ├── allow CTE references
+    └── require external DATABASE.SCHEMA.VIEW allowlist matches
     │
     ▼
 apply top-level LIMIT 51 unless a smaller literal limit exists
-    │
-    ▼
-generate Snowflake SQL, parse it again, and re-run policy
 ```
 
 The 51-row cap is `K + 1` for a 50-row result budget. It lets Arrow admission detect
@@ -365,14 +346,10 @@ ORDER BY account_id
 ```
 
 is regenerated with a server-owned top-level `LIMIT 51`. A model-supplied larger
-literal limit is replaced; a smaller one is preserved. Functions—including ordinary
-aggregates—are intentionally rejected in the MVP. So are DDL, DML, stages, file
-transfer, calls, variables, parameters, time travel, scripting, dynamic identifiers,
-partially qualified external relations, set-operation roots, and unknown AST nodes.
-
-The hostile policy corpus is in [`tests/test_sql_policy.py`](../tests/test_sql_policy.py).
-When upgrading SQLGlot or broadening grammar, treat that test as an authorization
-review, not a compatibility chore.
+literal limit is replaced; a smaller one is preserved. Ordinary read expressions,
+functions, and set operations are accepted. DDL, DML, multiple statements, and
+unapproved or partially qualified external relations are rejected. The configured
+read-only Snowflake role remains the mutation boundary.
 
 ## 8. Submission, execution, and acceptance ordering
 
@@ -385,25 +362,22 @@ MCP or CLI adapter
         ├── SnowflakeQueryAdmission.__call__
         │   └── policy.authorize(sql)                 synchronous rejection point
         ├── broker.submit(...)                        creates PENDING record
-        ├── create background _run task
-        └── await started future
-            └── background work
-                └── asyncio.to_thread(_execute)
-                    ├── acquire non-blocking one-query lock
-                    ├── request_cursor(...)
-                    │   ├── open connection
-                    │   └── create cursor
-                    ├── mark_started(cursor)
-                    │   └── broker.register_cursor(...)  cancellation now controllable
-                    ├── cursor.execute(governed_sql, timeout=60)
-                    ├── fetch and admit complete result
-                    ├── release private cursor association
-                    └── close cursor and connection
+        └── schedule background _run task
+            └── asyncio.to_thread(_execute)
+                ├── acquire non-blocking one-query lock
+                ├── request_cursor(...)
+                │   ├── open connection
+                │   └── create cursor
+                ├── broker.register_cursor(...)
+                ├── cursor.execute(governed_sql, timeout=60)
+                ├── fetch and admit complete result
+                ├── release private cursor association
+                └── close cursor and connection
 ```
 
-Only after `mark_started()` resolves the `started` future can `submit()` return an
-accepted request to MCP. If connection or cursor creation fails, startup fails and MCP
-receives only `SERVICE_UNAVAILABLE`; there is no accepted-but-uncancellable gap.
+Connection or cursor failure becomes the request's coarse `failed` state. If
+cancellation, expiry, or shutdown wins before cursor registration, the broker cancels
+the late cursor instead of attaching it.
 
 The Snowflake connector is synchronous, so `_execute` runs through
 `asyncio.to_thread()`. `SnowflakeQueryAdmission` also owns a non-blocking thread lock as
@@ -466,8 +440,8 @@ Important race behavior:
 - Expiry is refreshed during lookup/list/capacity checks and by an executor-owned
   expiry task. Expiry clears the source under lock and cancels an attached cursor only
   after releasing the broker lock.
-- The viewer backend has a cancellation route; MCP deliberately has no cancellation
-  tool.
+- MCP and the viewer expose no cancellation command; broker cancellation remains an
+  internal lifecycle and shutdown mechanism.
 
 The broker stores `expires_at` for local lifecycle management and viewer display. MCP
 does not disclose it.
@@ -481,14 +455,13 @@ does not disclose it.
 | `GET /healthz` | Value-free readiness |
 | `GET /v1/requests` | Recent local request metadata |
 | `GET /v1/requests/{id}` | One local request summary |
-| `POST /v1/requests/{id}/cancel` | Local cancellation |
 | `GET /v1/requests/{id}/stream` | Complete admitted Arrow result |
 
 These are viewer routes, not MCP contracts. They may include `expires_at`, and the
 stream contains result bytes. They are loopback-only but unauthenticated under the
 single-analyst threat model.
 
-Every route sets no-store and defensive browser headers. Streaming fails closed unless
+Every route sets `no-store` and `nosniff`. Streaming fails closed unless
 the app factory was given explicit admission limits and the request is currently
 complete with a source.
 
@@ -616,7 +589,7 @@ The tests are organized around boundaries rather than only functions:
 |---|---|
 | Exact MCP capabilities, schemas, parity, sanitization, HTTP round trip | [`test_mcp_gateway.py`](../tests/test_mcp_gateway.py) |
 | Pi tool registration, receipt validation, stdin, process bounds, failures | [`integrations/pi/extensions`](../integrations/pi/extensions) |
-| Pi root-manifest extension and skill discovery | [`package-smoke.test.mjs`](../integrations/pi/package-smoke.test.mjs) |
+| Pi root-manifest extension discovery | [`package-smoke.test.mjs`](../integrations/pi/package-smoke.test.mjs) |
 | Lifecycle races, cursor identity, cancellation, expiry, capacity | [`test_broker.py`](../tests/test_broker.py) |
 | Acceptance ordering and generic background cleanup | [`test_executor.py`](../tests/test_executor.py) |
 | Hostile SQL and generated-SQL round trip | [`test_sql_policy.py`](../tests/test_sql_policy.py) |
@@ -624,7 +597,6 @@ The tests are organized around boundaries rather than only functions:
 | Incremental schema/cell/row/byte admission | [`test_arrow_stream.py`](../tests/test_arrow_stream.py) |
 | Viewer routes, headers, frames, incomplete stream, cancellation mid-stream | [`test_result_api.py`](../tests/test_result_api.py) |
 | Canary absence across MCP/log/error/URL channels | [`test_boundary_canaries.py`](../tests/test_boundary_canaries.py) |
-| No browser persistence, service worker, or external DuckDB readers | [`test_browser_boundary.py`](../tests/test_browser_boundary.py) |
 | Browser framing and terminal publication | [`result-stream.test.ts`](../apps/viewer/src/result-stream.test.ts) |
 | Incremental Arrow ingestion | [`arrow-ingest.test.ts`](../apps/viewer/src/arrow-ingest.test.ts) |
 | Worker destruction and one-result lifecycle | [`worker.test.ts`](../apps/viewer/src/worker.test.ts) |
@@ -716,13 +688,13 @@ Use this as a map, not a substitute for threat modeling:
 | If changing… | Review together… | Minimum focused checks |
 |---|---|---|
 | MCP fields, tools, status, or errors | contracts, gateway, PLAN model-visible contracts | MCP gateway + boundary canaries + real Streamable HTTP round trip |
-| Pi tools, process handling, or package API | CLI, Pi contracts, extension, skill, ADR 0014 | Pi typecheck + Pi tests + package-load smoke test |
-| SQL grammar or SQLGlot version | policy, ADR 0010, allowed views, row-cap semantics | full hostile SQL corpus + generated round trip |
+| Pi tools, process handling, or package API | CLI, Pi contracts, extension, ADR 0014 | Pi typecheck + Pi tests + package-load smoke test |
+| SQL grammar or SQLGlot version | policy, ADR 0017, allowed views, row-cap semantics | SQL policy tests |
 | Connector settings or lifecycle | configuration, Snowflake context manager, executor, ADRs 0009/0011 | configuration + Snowflake + executor tests |
 | Cancellation, expiry, concurrency | broker and generic executor | broker race tests + Snowflake cancellation tests |
 | Arrow types or limits | backend admission, stream replay, browser parser/ingestion, viewport | Arrow + Result API + all viewer tests |
 | Stream framing | Python writer and TypeScript parser together | Result API + result-stream + canary tests |
-| Browser persistence or workers | worker, DuckDB, Vite, threat model | browser-boundary + worker + build |
+| Browser workers | worker, DuckDB, Vite | worker tests + build |
 | Network binding or deployment | launcher, Vite, SECURITY, ADR 0008 | local-server tests and listener inspection |
 
 Consequential security or architecture changes require a new ADR and an update to the
@@ -739,7 +711,6 @@ The implementation intentionally does not provide:
 - restart-durable requests or results;
 - viewer authentication or same-host process isolation;
 - results larger than 50 rows or 256 KiB;
-- functions in submitted SQL;
 - pagination, sorting, filtering, projection, charts, or virtualization;
 - export, clipboard-all, uploads, external readers, persistence, or telemetry; or
 - remote hosting, sharing, accounts, tenants, or multi-user authorization.

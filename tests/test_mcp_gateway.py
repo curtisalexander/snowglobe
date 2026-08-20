@@ -73,7 +73,6 @@ def test_receipt_has_constant_shape_without_input_data() -> None:
                 "submit_read_query",
                 {
                     "sql": f"select '{canary}'",
-                    "purpose": canary,
                     "requested_ttl": 900,
                 },
             )
@@ -114,7 +113,6 @@ def test_invalid_arguments_return_only_fixed_reason() -> None:
                 "submit_read_query",
                 {
                     "sql": canary,
-                    "purpose": canary,
                     "requested_ttl": True,
                 },
             )
@@ -133,7 +131,6 @@ def test_unrepresentable_ttl_is_an_invalid_request() -> None:
                 "submit_read_query",
                 {
                     "sql": "select 1",
-                    "purpose": "test",
                     "requested_ttl": 10**100,
                 },
             )
@@ -144,16 +141,15 @@ def test_unrepresentable_ttl_is_an_invalid_request() -> None:
     asyncio.run(exercise())
 
 
-def test_synthetic_submission_returns_accepted_only_after_pending_startup() -> None:
+def test_synthetic_submission_returns_accepted_after_pending_registration() -> None:
     request_broker = InProcessBroker()
     started = asyncio.Event()
     release = asyncio.Event()
     source = Source()
     canary = "SUBMISSION_VALUE_CANARY"
 
-    def admit(sql: str, purpose: str):
+    def admit(sql: str):
         assert canary in sql
-        assert purpose == canary
 
         async def work(request_id: str, mark_started) -> Source:
             assert request_broker.get_request(request_id).status.value == "pending"
@@ -177,7 +173,6 @@ def test_synthetic_submission_returns_accepted_only_after_pending_startup() -> N
                 "submit_read_query",
                 {
                     "sql": f"select '{canary}'",
-                    "purpose": canary,
                     "requested_ttl": 60,
                 },
             )
@@ -218,12 +213,10 @@ def test_background_execution_failure_exposes_only_failed_without_process_output
     request_broker = InProcessBroker()
     finished = asyncio.Event()
     sql_canary = "EXECUTION_SQL_CANARY"
-    purpose_canary = "EXECUTION_PURPOSE_CANARY"
     error_canary = "EXECUTION_ERROR_CANARY"
 
-    def admit(sql: str, purpose: str):
+    def admit(sql: str):
         assert sql_canary in sql
-        assert purpose == purpose_canary
 
         async def work(_request_id: str, mark_started) -> Source:
             mark_started(None)
@@ -245,7 +238,6 @@ def test_background_execution_failure_exposes_only_failed_without_process_output
                 "submit_read_query",
                 {
                     "sql": f"select '{sql_canary}'",
-                    "purpose": purpose_canary,
                     "requested_ttl": 60,
                 },
             )
@@ -262,12 +254,12 @@ def test_background_execution_failure_exposes_only_failed_without_process_output
                 "status": "failed",
             }
             model_visible = accepted.model_dump_json() + failed.model_dump_json()
-            for canary in (sql_canary, purpose_canary, error_canary):
+            for canary in (sql_canary, error_canary):
                 assert canary not in model_visible
 
     asyncio.run(exercise())
     captured = capsys.readouterr()
-    for canary in (sql_canary, purpose_canary, error_canary):
+    for canary in (sql_canary, error_canary):
         assert canary not in captured.out
         assert canary not in captured.err
 
@@ -275,7 +267,7 @@ def test_background_execution_failure_exposes_only_failed_without_process_output
 def test_synthetic_policy_rejection_uses_only_fixed_reason() -> None:
     request_broker = InProcessBroker()
 
-    def reject(_sql: str, _purpose: str):
+    def reject(_sql: str):
         raise QueryPolicyRejected
 
     synthetic_server = create_server(
@@ -289,7 +281,7 @@ def test_synthetic_policy_rejection_uses_only_fixed_reason() -> None:
         async with Client(synthetic_server) as client:
             result = await client.call_tool(
                 "submit_read_query",
-                {"sql": "select 1", "purpose": "test", "requested_ttl": 60},
+                {"sql": "select 1", "requested_ttl": 60},
             )
             assert result.structured_content is not None
             assert result.structured_content["status"] == "rejected"
@@ -363,7 +355,7 @@ def test_unexpected_exception_is_sanitized(
         async with Client(server) as client:
             result = await client.call_tool(
                 "submit_read_query",
-                {"sql": "select 1", "purpose": "test", "requested_ttl": 60},
+                {"sql": "select 1", "requested_ttl": 60},
             )
 
             assert result.structured_content is not None
@@ -412,7 +404,7 @@ def test_streamable_http_round_trip_preserves_the_contract() -> None:
 
                 result = await session.call_tool(
                     "submit_read_query",
-                    {"sql": "select 1", "purpose": "test", "requested_ttl": 60},
+                    {"sql": "select 1", "requested_ttl": 60},
                 )
                 assert result.structured_content is not None
                 assert result.structured_content["reason_code"] == "SERVICE_UNAVAILABLE"

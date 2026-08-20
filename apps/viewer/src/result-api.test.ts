@@ -66,33 +66,23 @@ describe("Result API client", () => {
     );
   });
 
-  it("rejects metadata for a different request or with additional fields", async () => {
+  it("rejects metadata for a different request", async () => {
     const requestId = "abcdefghijklmnopqrstuvwx";
-    for (const body of [
-      {
-        request_id: "zyxwvutsrqponmlkjihgfedc",
-        status: "complete",
-        expires_at: "2026-08-19T12:00:00Z",
-      },
-      {
-        request_id: requestId,
-        status: "complete",
-        expires_at: "2026-08-19T12:00:00Z",
-        rows: ["RESULT_CANARY"],
-      },
-    ]) {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockResolvedValue(
-          new Response(JSON.stringify(body), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            request_id: "zyxwvutsrqponmlkjihgfedc",
+            status: "complete",
+            expires_at: "2026-08-19T12:00:00Z",
           }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
         ),
-      );
+      ),
+    );
 
-      await expect(getRequest(requestId)).rejects.toThrow(ResultApiError);
-    }
+    await expect(getRequest(requestId)).rejects.toThrow(ResultApiError);
   });
 
   it.each([

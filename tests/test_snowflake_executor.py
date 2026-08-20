@@ -134,7 +134,6 @@ def test_acceptance_waits_for_cursor_registration_then_retrieves_incrementally()
 
         request = await executor.submit(
             sql=f"select VALUE from {ALLOWED_VIEW}",
-            purpose="connected path",
             requested_ttl=timedelta(minutes=5),
         )
 
@@ -172,7 +171,6 @@ def test_empty_result_preserves_the_connector_arrow_schema() -> None:
 
         request = await executor.submit(
             sql=f"select * from {ALLOWED_VIEW}",
-            purpose="empty result",
             requested_ttl=timedelta(minutes=5),
         )
         while broker.get_request(request.request_id).status is RequestStatus.PENDING:
@@ -195,7 +193,6 @@ def test_oversized_result_fails_before_publication_and_closes_resources() -> Non
 
         request = await executor.submit(
             sql=f"select VALUE from {ALLOWED_VIEW}",
-            purpose="overflow",
             requested_ttl=timedelta(minutes=5),
         )
         while broker.get_request(request.request_id).status is RequestStatus.PENDING:
@@ -222,7 +219,6 @@ def test_cleanup_failure_does_not_publish_an_otherwise_admitted_result() -> None
 
         request = await executor.submit(
             sql=f"select VALUE from {ALLOWED_VIEW}",
-            purpose="cleanup failure",
             requested_ttl=timedelta(minutes=5),
         )
         while broker.get_request(request.request_id).status is RequestStatus.PENDING:
@@ -248,7 +244,6 @@ def test_cancellation_targets_active_cursor_and_remains_cancelled() -> None:
 
         request = await executor.submit(
             sql=f"select VALUE from {ALLOWED_VIEW}",
-            purpose="cancel",
             requested_ttl=timedelta(minutes=5),
         )
         assert broker.cancel(request.request_id).status is RequestStatus.CANCELLED
@@ -270,7 +265,6 @@ def test_policy_rejection_never_opens_a_connection() -> None:
         with pytest.raises(QueryPolicyRejected, match=r"^$"):
             await executor.submit(
                 sql="delete from unsafe",
-                purpose="reject",
                 requested_ttl=timedelta(minutes=5),
             )
 

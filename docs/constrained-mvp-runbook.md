@@ -84,7 +84,7 @@ artifacts.
 ## 3. Local setup
 
 Use Linux, macOS, or native Windows 10/11 for the credential-bearing MVP runtime.
-Windows configuration and key files must be on local NTFS storage.
+On Windows, keep configuration and key files in an analyst-controlled location.
 
 Install the exact locked project dependencies and optional connector:
 
@@ -100,30 +100,14 @@ Use an existing native Snowflake `connections.toml`, or copy
 profile's `allowed_views` must contain only the fully qualified
 administrator-approved views; use `database`, never `db`.
 
-The profile and key must be regular files owned by the operator, not symlinks, with no
-group or other permissions. The owner must have read permission:
+Keep the profile and key in an access-controlled location outside the repository and
+agent-visible workspaces. Snowglobe does not inspect ownership or permissions.
 
 ```bash
 chmod 600 /absolute/private/path/connections.toml
 chmod 600 /absolute/private/path/snowglobe.toml
 chmod 600 /absolute/private/path/snowglobe-test-key.p8
 ```
-
-On Windows PowerShell, remove inherited access and grant the current account only
-read/write access:
-
-```powershell
-$config = "$env:USERPROFILE\.snowglobe\connections.toml"
-$policy = "$env:USERPROFILE\.snowglobe\snowglobe.toml"
-$key = "$env:USERPROFILE\.snowglobe\snowglobe-test-key.p8"
-$account = "$env:USERDOMAIN\$env:USERNAME"
-icacls $config /inheritance:r /grant:r "${account}:(R,W)"
-icacls $policy /inheritance:r /grant:r "${account}:(R,W)"
-icacls $key /inheritance:r /grant:r "${account}:(R,W)"
-```
-
-Snowglobe rejects Windows reparse points and ACL access for unprivileged other
-principals. Local System and Administrators remain privileged like POSIX root.
 
 Validate configuration, key parsing, and the SQL view allowlist without connecting:
 
@@ -217,7 +201,6 @@ Submit through the `submit_read_query` MCP tool with arguments shaped exactly as
 ```json
 {
   "sql": "SELECT * FROM MVP_DATABASE.MVP_SCHEMA.ALLOWED_CANARY_VIEW",
-  "purpose": "Constrained Snowglobe MVP canary check",
   "requested_ttl": 300
 }
 ```
@@ -228,9 +211,8 @@ tool with the same fields. The extension passes SQL to the result-free CLI over 
 Use the raw CLI only for adapter diagnosis.
 
 Replace the example relation with one exact Snowglobe `allowed_views` entry. Keep
-identifiers fully qualified. Do not put a result canary literal in SQL or `purpose`;
-the canary must originate in the approved view. Functions are not allowed in submitted
-MVP SQL.
+identifiers fully qualified. Do not put a result canary literal in SQL; the canary must
+originate in the approved view.
 
 The accepted MCP, Pi tool, or CLI response must contain only `status`, `request_id`,
 and `reason_code`. Poll `get_query_status` with only that `request_id`; for raw CLI
@@ -245,25 +227,7 @@ screenshots, copy, export, or shell HTTP clients to inspect the result stream it
 Reload or close the page after inspection to destroy the worker and in-memory DuckDB
 state.
 
-## 7. Cancellation
-
-There is deliberately no MCP cancellation tool. Submit the administrator-approved
-long-running bounded-result view, copy the accepted opaque ID, and cancel it through
-the local viewer backend before it completes:
-
-```bash
-REQUEST_ID='<opaque MCP request ID>'
-curl --fail --silent --request POST \
-  "http://127.0.0.1:8000/v1/requests/${REQUEST_ID}/cancel"
-```
-
-The response may contain only `request_id`, `status: "cancelled"`, and `expires_at`.
-Poll through MCP and require `cancelled`; the viewer must not offer a result. Repeat
-the cancel request once and require it to remain `cancelled`. The administrator must
-confirm cancellation or bounded termination in Snowflake query history and no
-unexpected warehouse use.
-
-## 8. Expiry
+## 7. Expiry
 
 Submit an allowed bounded query with `requested_ttl: 10`. After acceptance, wait at
 least 11 seconds, then poll it through MCP and look it up in the viewer. Require
@@ -271,7 +235,7 @@ least 11 seconds, then poll it through MCP and look it up in the viewer. Require
 complete. If it was still executing at expiry, the administrator must confirm bounded
 termination in query history. The runtime caps every requested TTL at five minutes.
 
-## 9. Graceful shutdown and restart
+## 8. Graceful shutdown and restart
 
 Close the viewer tab first so its application worker and DuckDB instance are
 destroyed. Stop Vite with `Ctrl-C`. Stop `snowglobe-local` with `Ctrl-C` and wait for
@@ -291,7 +255,7 @@ the administrator that no test query is running and the dedicated warehouse has
 auto-suspended. Remove local credentials when the test campaign is complete according
 to the administrator's key-revocation procedure.
 
-## 10. Required connected checks and evidence
+## 9. Required connected checks and evidence
 
 Run the cases below while the administrator independently watches query history,
 grants, resource-monitor state, and warehouse usage:

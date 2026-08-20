@@ -55,12 +55,12 @@ Implemented pieces include:
   `get_query_status`;
 - a transport-neutral control plane and result-free CLI for Pi and other shell-only
   agents;
-- an installable Pi package with two native typed tools and a workflow skill;
+- an installable Pi package with two native typed tools;
 - a single-analyst broker with pending, complete, failed, cancelled, and expired
   lifecycle states;
-- a configured background Snowflake executor that registers a request-scoped cursor
-  before acceptance, fetches incrementally, and publishes only admitted results;
-- local viewer routes to list, find, cancel, and stream a request;
+- a configured background Snowflake executor that fetches incrementally and publishes
+  only admitted results;
+- local viewer routes to list, find, and stream a request;
 - incremental Arrow admission and failure-atomic framing; and
 - in-memory DuckDB-Wasm ingestion with a bounded main-thread viewport.
 
@@ -92,18 +92,15 @@ Neither adapter may return rows, schema, column names, counts, sizes, timing, Sn
 query IDs, database errors, result URLs, or result-derived artifacts. Result bytes
 travel only through the local viewer backend into the browser worker.
 
-Loopback is not authentication or process isolation. A coding agent with arbitrary
-same-host HTTP, browser, shell, or process access may be able to call the local viewer
-backend or capture rendered data. Snowglobe prevents an automatic result-bearing
-control channel; it does not claim to defend the analyst's data from other processes
-running as that analyst.
+Enabling Snowglobe's MCP enables only its result-free submission and lifecycle tools;
+it does not grant access to the viewer routes. Browser, screenshot, shell, and direct
+HTTP access are separate agent capabilities controlled by the agent host.
 
 ## Local development
 
 The credential-bearing MVP runtime supports Linux, macOS, and native Windows 10/11.
-Windows credential files must be on local NTFS storage so Snowglobe can enforce owner,
-ACL, and reparse-point checks. All platforms require Python 3.12 with `uv`, plus
-Node.js 22.12 or newer and npm.
+Snowglobe trusts the analyst and operating system to manage file access. All platforms
+require Python 3.12 with `uv`, plus Node.js 22.12 or newer and npm.
 
 From a fresh clone, install the exact locked dependencies, including the optional
 Snowflake connector:
@@ -141,7 +138,6 @@ read from standard input and stdout contains exactly one closed JSON receipt:
 
 ```bash
 uv run snowglobe submit \
-  --purpose "Constrained Snowglobe MVP canary check" \
   --ttl 300 <<'SQL'
 SELECT * FROM TEST_DATABASE.TEST_SCHEMA.APPROVED_VIEW
 SQL
@@ -186,23 +182,11 @@ before starting either process. The Snowflake executor reads a native local
 `connections.toml` profile and a matching Snowglobe policy profile from
 `snowglobe.toml`. Start from [`connections.example.toml`](connections.example.toml)
 and [`snowglobe.example.toml`](snowglobe.example.toml); never commit the real files or
-private key. Snowglobe accepts all three only when they are regular files owned by the
-current user, are not symlinks or Windows reparse points, and grant no access to
-unprivileged other users. On POSIX, the owner must have read permission and may have
-write permission (`0400` or `0600`):
+private key. Keep them in an access-controlled location outside the repository and
+agent-visible workspaces. Snowglobe does not inspect file ownership or permissions.
 
 ```bash
 chmod 600 connections.toml snowglobe.toml /path/to/snowflake-key.p8
-```
-
-On Windows, remove inherited ACL entries and grant only your account read/write access
-(Local System and Administrators remain privileged like POSIX root):
-
-```powershell
-$account = "$env:USERDOMAIN\$env:USERNAME"
-icacls C:\private\connections.toml /inheritance:r /grant:r "${account}:(R,W)"
-icacls C:\private\snowglobe.toml /inheritance:r /grant:r "${account}:(R,W)"
-icacls C:\private\snowflake-key.p8 /inheritance:r /grant:r "${account}:(R,W)"
 ```
 
 Validate the local profile and key without connecting to Snowflake:
@@ -232,9 +216,9 @@ and 256 KiB serialized and decoded Arrow so the complete admitted result fits th
 current viewer.
 
 Each Snowglobe policy profile has an exact `allowed_views` list. MVP queries must
-reference one of those views as a fully qualified `DATABASE.SCHEMA.VIEW`. The initial
-function allowlist is intentionally empty: functions, UDFs, table functions, stages,
-variables, and partially qualified relations are rejected until separately reviewed.
+reference those views as fully qualified `DATABASE.SCHEMA.VIEW` names. Snowglobe
+accepts ordinary read-query expressions and functions; the configured read-only role
+is responsible for preventing mutation and unauthorized object access.
 
 Use the [getting-started guide](docs/getting-started.md) for the complete clone,
 Snowflake profile, preflight, launch, Amp, Codex, Claude Code, Continue.dev, first-query,

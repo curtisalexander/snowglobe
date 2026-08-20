@@ -25,8 +25,8 @@ def test_admits_before_registering_pending_work_and_completes_in_background() ->
         release = asyncio.Event()
         source = Source()
 
-        def admit(sql: str, purpose: str):
-            assert (sql, purpose) == ("select 1", "synthetic proof")
+        def admit(sql: str):
+            assert sql == "select 1"
 
             async def work(request_id: str, mark_started) -> Source:
                 assert broker.get_request(request_id).status is RequestStatus.PENDING
@@ -40,7 +40,6 @@ def test_admits_before_registering_pending_work_and_completes_in_background() ->
         executor = BackgroundQueryExecutor(broker=broker, admit=admit)
         request = await executor.submit(
             sql="select 1",
-            purpose="synthetic proof",
             requested_ttl=timedelta(minutes=5),
         )
 
@@ -60,7 +59,7 @@ def test_policy_rejection_creates_no_request() -> None:
     async def exercise() -> None:
         broker = InProcessBroker()
 
-        def reject(_sql: str, _purpose: str):
+        def reject(_sql: str):
             raise QueryPolicyRejected
 
         executor = BackgroundQueryExecutor(broker=broker, admit=reject)
@@ -68,7 +67,6 @@ def test_policy_rejection_creates_no_request() -> None:
         with pytest.raises(QueryPolicyRejected, match=r"^$"):
             await executor.submit(
                 sql="select 1",
-                purpose="rejected",
                 requested_ttl=timedelta(minutes=5),
             )
 
@@ -85,7 +83,7 @@ def test_background_failure_becomes_detail_free_failed_state(
     async def exercise() -> None:
         broker = InProcessBroker()
 
-        def admit(_sql: str, _purpose: str):
+        def admit(_sql: str):
             async def work(_request_id: str, mark_started) -> Source:
                 mark_started(None)
                 raise RuntimeError(canary)
@@ -95,7 +93,6 @@ def test_background_failure_becomes_detail_free_failed_state(
         executor = BackgroundQueryExecutor(broker=broker, admit=admit)
         request = await executor.submit(
             sql="select 1",
-            purpose="failure proof",
             requested_ttl=timedelta(minutes=5),
         )
 

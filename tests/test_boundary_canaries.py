@@ -59,10 +59,9 @@ def test_result_canaries_exist_only_in_the_viewer_data_path(
     broker = InProcessBroker(maximum_pending_requests=1)
     source = CanarySource()
     sql_canary = "SQL_INPUT_CANARY"
-    purpose_canary = "PURPOSE_INPUT_CANARY"
     error_canary = "INTERNAL_DRIVER_ERROR_CANARY"
 
-    def admit(sql: str, purpose: str):
+    def admit(sql: str):
         async def work(
             _request_id: str,
             mark_started,
@@ -71,7 +70,6 @@ def test_result_canaries_exist_only_in_the_viewer_data_path(
             if error_canary in sql:
                 raise RuntimeError(error_canary)
             assert sql_canary in sql
-            assert purpose == purpose_canary
             return source
 
         return work
@@ -89,7 +87,6 @@ def test_result_canaries_exist_only_in_the_viewer_data_path(
                 "submit_read_query",
                 {
                     "sql": f"select '{sql_canary}'",
-                    "purpose": purpose_canary,
                     "requested_ttl": 60,
                 },
             )
@@ -107,7 +104,6 @@ def test_result_canaries_exist_only_in_the_viewer_data_path(
                 "submit_read_query",
                 {
                     "sql": f"select '{error_canary}'",
-                    "purpose": "failure",
                     "requested_ttl": 60,
                 },
             )
@@ -134,7 +130,7 @@ def test_result_canaries_exist_only_in_the_viewer_data_path(
         "SECOND_BATCH_CANARY",
         "SECOND_BINARY_CANARY",
     )
-    private_canaries = (*result_canaries, sql_canary, purpose_canary, error_canary)
+    private_canaries = (*result_canaries, sql_canary, error_canary)
     for canary in private_canaries:
         assert canary not in model_visible
 

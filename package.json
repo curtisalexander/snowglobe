@@ -15,9 +15,6 @@
   "pi": {
     "extensions": [
       "./integrations/pi/extensions/index.ts"
-    ],
-    "skills": [
-      "./integrations/pi/skills"
     ]
   },
   "scripts": {

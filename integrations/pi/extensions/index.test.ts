@@ -37,13 +37,13 @@ test("does not pass malformed CLI result data into Pi context", async () => {
   );
   const result = await tools[0].execute(
     "call-id",
-    { sql: "SQL_CANARY", purpose: "PURPOSE_CANARY", requested_ttl: 300 },
+    { sql: "SQL_CANARY", requested_ttl: 300 },
     undefined,
   );
   const receipt = JSON.parse(result.content[0].text);
   assert.equal(receipt.status, "rejected");
   assert.equal(receipt.reason_code, "SERVICE_UNAVAILABLE");
-  assert.doesNotMatch(result.content[0].text, /RESULT_VALUE_CANARY|SQL_CANARY|PURPOSE_CANARY/);
+  assert.doesNotMatch(result.content[0].text, /RESULT_VALUE_CANARY|SQL_CANARY/);
 });
 
 test("passes exact lifecycle receipts through unchanged", async () => {
@@ -78,7 +78,7 @@ test("invokes the locked package CLI with SQL only on stdin", async () => {
 
   await tools[0].execute(
     "call-id",
-    { sql: "SQL_STDIN_CANARY", purpose: "bounded analysis", requested_ttl: 300 },
+    { sql: "SQL_STDIN_CANARY", requested_ttl: 300 },
     undefined,
   );
 

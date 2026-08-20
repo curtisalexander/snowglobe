@@ -56,7 +56,7 @@ class SnowflakeQueryAdmission:
         self._connect = connect
         self._active = Lock()
 
-    def __call__(self, sql: str, _purpose: str):
+    def __call__(self, sql: str):
         governed_sql = self._policy.authorize(sql)
 
         async def work(

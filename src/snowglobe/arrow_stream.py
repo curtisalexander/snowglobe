@@ -159,27 +159,43 @@ def admit_record_batches(
     return InMemoryArrowBatchSource(schema=schema, batches=tuple(admitted))
 
 
-async def admitted_ipc_chunks(
+async def ipc_chunks(
     source: ArrowBatchSource,
-    limits: ArrowAdmissionLimits,
+    maximum_bytes: int,
 ) -> AsyncIterator[bytes]:
-    """Validate actual batches and yield one bounded Arrow IPC chunk at a time."""
+    """Serialize an already-admitted source as bounded Arrow IPC chunks."""
 
-    state = _AdmissionState(source.schema, limits)
+    if maximum_bytes <= 0:
+        raise ArrowAdmissionError
+    sink = _ChunkSink()
+    writer = pa.ipc.new_stream(sink, source.schema)
+    written = 0
     finished = False
     try:
         async for batch in source.open():
-            chunk = state.admit(batch)
+            if not isinstance(batch, pa.RecordBatch) or not batch.schema.equals(
+                source.schema, check_metadata=True
+            ):
+                raise ArrowAdmissionError
+            writer.write_batch(batch)
+            chunk = sink.drain()
+            written += len(chunk)
+            if written > maximum_bytes:
+                raise ArrowAdmissionError
             if chunk:
                 yield chunk
 
-        chunk = state.finish()
+        writer.close()
         finished = True
+        chunk = sink.drain()
+        written += len(chunk)
+        if written > maximum_bytes:
+            raise ArrowAdmissionError
         if chunk:
             yield chunk
     finally:
         if not finished:
-            state.close()
+            writer.close()
 
 
 def _validate_schema(schema: pa.Schema, limits: ArrowAdmissionLimits) -> None:

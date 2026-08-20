@@ -10,7 +10,7 @@ from snowglobe.broker import CancellableCursor, InProcessBroker, RequestUnavaila
 
 ExecutionStarted = Callable[[CancellableCursor | None], Callable[[], None]]
 AdmittedWork = Callable[[str, ExecutionStarted], Awaitable[ArrowBatchSource]]
-QueryAdmission = Callable[[str, str], AdmittedWork]
+QueryAdmission = Callable[[str], AdmittedWork]
 
 
 class BackgroundQueryExecutor:
@@ -25,16 +25,14 @@ class BackgroundQueryExecutor:
         self,
         *,
         sql: str,
-        purpose: str,
         requested_ttl: timedelta,
     ) -> RequestView:
-        """Return only after admission, pending registration, and task startup succeed."""
+        """Return after admission, pending registration, and task scheduling succeed."""
 
-        work = self._admit(sql, purpose)
+        work = self._admit(sql)
         request = self._broker.submit(requested_ttl=requested_ttl)
         loop = asyncio.get_running_loop()
-        started: asyncio.Future[None] = loop.create_future()
-        coroutine = self._run(request, work, started)
+        coroutine = self._run(request, work)
         try:
             task = loop.create_task(coroutine)
         except Exception:
@@ -44,7 +42,6 @@ class BackgroundQueryExecutor:
             raise
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
-        await started
         return request
 
     async def close(self) -> None:
@@ -61,18 +58,10 @@ class BackgroundQueryExecutor:
         self,
         request: RequestView,
         work: AdmittedWork,
-        started: asyncio.Future[None],
     ) -> None:
-        loop = asyncio.get_running_loop()
-
         def mark_started(cursor: CancellableCursor | None) -> Callable[[], None]:
-            try:
-                if cursor is not None:
-                    self._broker.register_cursor(request.request_id, cursor)
-            except Exception as error:
-                loop.call_soon_threadsafe(_set_future_exception, started, error)
-                raise
-            loop.call_soon_threadsafe(_set_future_result, started)
+            if cursor is not None:
+                self._broker.register_cursor(request.request_id, cursor)
 
             def release() -> None:
                 if cursor is not None:
@@ -97,24 +86,10 @@ class BackgroundQueryExecutor:
             expiry_task.cancel()
             with suppress(asyncio.CancelledError):
                 await expiry_task
-            if not started.done():
-                raise RequestUnavailable
             self._broker.publish(request.request_id, source)
-        except BaseException as error:
-            if not started.done():
-                _set_future_exception(started, error)
+        except BaseException:
             with suppress(RequestUnavailable):
                 self._broker.fail(request.request_id)
         finally:
             if expiry_task is not None and not expiry_task.done():
                 expiry_task.cancel()
-
-
-def _set_future_result(future: asyncio.Future[None]) -> None:
-    if not future.done():
-        future.set_result(None)
-
-
-def _set_future_exception(future: asyncio.Future[None], error: BaseException) -> None:
-    if not future.done():
-        future.set_exception(error)

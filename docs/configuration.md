@@ -61,18 +61,10 @@ While building connector arguments, Snowglobe reads the selected profile's
 memory to the PKCS#8 DER bytes expected by `snowflake.connector.connect`. It does not
 log, trace, serialize, or return the path or key bytes.
 
-Both configuration files and the key must each be a user-readable regular file owned
-by the current user and must not grant access to unprivileged other users. On POSIX,
-owner mode `0400` or `0600` is accepted and Snowglobe opens with `O_NOFOLLOW`. On native
-Windows, Snowglobe opens the path with `FILE_FLAG_OPEN_REPARSE_POINT`, rejects every
-reparse point, checks that the owner SID matches the current process-token user, and
-rejects allow ACL entries for principals other than that user, Local System, or
-Administrators. Those privileged principals are equivalent to POSIX root and are
-outside Snowglobe's host-isolation claim.
-
-Native Windows support requires a local NTFS volume. FAT, exFAT, incompatible network
-shares, and reparse-point paths fail closed. See
-[ADR 0015](decisions/0015-native-windows-credential-files.md). Encrypted-key
+Snowglobe uses normal reads from the configured paths and trusts the analyst and
+operating system to manage file access. Another local account permitted to access a
+file can read or modify it without Snowglobe detecting that access. See
+[ADR 0017](decisions/0017-minimal-model-context-boundary.md). Encrypted-key
 passphrases are intentionally not part of the file contract.
 
 - The real `connections.toml` and `snowglobe.toml` are ignored by Git.
@@ -90,9 +82,6 @@ chmod 600 /absolute/private/path/connections.toml
 chmod 600 /absolute/private/path/snowglobe.toml
 chmod 600 /absolute/private/path/snowglobe-key.p8
 ```
-
-On Windows, remove inherited ACL entries and grant only the current account read/write
-access as shown in the [getting-started guide](getting-started.md).
 
 The configured Snowflake identity is the analyst's local execution identity. Its role
 and Snowflake policies are the independent data-access boundary. Snowglobe does not add

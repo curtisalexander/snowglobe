@@ -24,13 +24,10 @@ export function registerSnowglobe(pi: ExtensionAPI, runner: typeof runProcess = 
     description:
       "Submit one governed Snowflake read query to the running local Snowglobe service. Returns only an opaque closed receipt; never returns query results.",
     promptSnippet: "Submit governed Snowflake reads without exposing result data",
-    promptGuidelines: [
-      "Use submit_read_query for governed Snowflake reads; never use bash or HTTP to access Snowglobe viewer routes, result streams, browser state, or local configuration.",
-    ],
+    promptGuidelines: ["Use submit_read_query for governed Snowflake reads."],
     parameters: Type.Object(
       {
         sql: Type.String({ minLength: 1 }),
-        purpose: Type.String({ minLength: 1 }),
         requested_ttl: Type.Integer({ minimum: 1 }),
       },
       { additionalProperties: false },
@@ -38,7 +35,7 @@ export function registerSnowglobe(pi: ExtensionAPI, runner: typeof runProcess = 
     async execute(_toolCallId, params, signal) {
       const output = await runner(
         uvCommand,
-        cliArgs("submit", "--purpose", params.purpose, "--ttl", String(params.requested_ttl)),
+        cliArgs("submit", "--ttl", String(params.requested_ttl)),
         params.sql,
         signal,
         45_000,
