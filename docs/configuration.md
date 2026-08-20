@@ -50,15 +50,18 @@ While building those arguments, the private-key loader:
 4. converts it in memory to unencrypted PKCS#8 DER expected by `snowflake.connector.connect`; and
 5. avoids logging, tracing, serializing, or returning the path or key bytes.
 
-The profile and key must each be an owner-readable regular file owned by the current
-user, must not be a symlink, and must grant no permissions to group or other users.
-Owner mode `0400` or `0600` is accepted. Snowglobe opens the final path without
-following symlinks and fails closed when the host cannot provide that operation.
+The profile and key must each be a user-readable regular file owned by the current
+user and must not grant access to unprivileged other users. On POSIX, owner mode `0400`
+or `0600` is accepted and Snowglobe opens with `O_NOFOLLOW`. On native Windows,
+Snowglobe opens the path with `FILE_FLAG_OPEN_REPARSE_POINT`, rejects every reparse
+point, checks that the owner SID matches the current process-token user, and rejects
+allow ACL entries for principals other than that user, Local System, or Administrators.
+Those privileged principals are equivalent to POSIX root and are outside Snowglobe's
+host-isolation claim.
 
-The MVP launcher is therefore supported on POSIX environments that provide user IDs,
-owner permission bits, and `O_NOFOLLOW`, including current Linux and macOS. Native
-Windows is not currently a supported credential host; use a reviewed POSIX host rather
-than weakening file checks.
+Native Windows support requires a local NTFS volume. FAT, exFAT, incompatible network
+shares, and reparse-point paths fail closed. See
+[ADR 0015](decisions/0015-native-windows-credential-files.md).
 
 Encrypted-key passphrases are intentionally not part of this first file contract. If needed, they must come from a secret manager or process secret—not a committed configuration file.
 
@@ -66,7 +69,8 @@ Encrypted-key passphrases are intentionally not part of this first file contract
 
 - The real `connections.toml` is ignored by Git.
 - Common private-key files (`*.pem`, `*.key`, and `*.p8`) are ignored, but deployment policy must protect key material regardless of extension.
-- Keep both files outside the repository when possible and set each to mode `0600`.
+- Keep both files outside the repository when possible. Set each to mode `0600` on
+  POSIX or remove inherited ACL access with the documented `icacls` command on Windows.
 - Use an absolute key path. Secret mounts are accepted only when they appear as an
   owner-only regular file and satisfy the same checks.
 - Do not place this configuration in an agent workspace or browser-served directory.

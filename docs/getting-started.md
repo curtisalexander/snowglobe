@@ -11,8 +11,9 @@ authoritative.
 
 ## 1. Prerequisites and installation
 
-Use Linux or macOS. Connected execution requires POSIX owner permission checks and
-`O_NOFOLLOW`; native Windows is not currently a supported credential host.
+Use Linux, macOS, or native Windows 10/11. On Windows, keep the configuration and key
+on a local NTFS volume; FAT, exFAT, incompatible network shares, and reparse-point
+paths cannot provide the reviewed credential-file checks and fail closed.
 
 Install Python 3.12, `uv`, Node.js 22.12 or newer, and npm. From a fresh clone:
 
@@ -22,6 +23,19 @@ cd snowglobe
 ./scripts/setup.sh
 ./scripts/check.sh
 ```
+
+On Windows PowerShell:
+
+```powershell
+git clone https://github.com/curtisalexander/snowglobe.git
+Set-Location snowglobe
+./scripts/setup.ps1
+./scripts/check.ps1
+```
+
+The remaining multi-line `bash` examples use `\` for continuation. In PowerShell,
+remove the backslashes and run the same arguments on one line; Windows paths may use
+forward slashes in Snowglobe arguments and TOML.
 
 The setup command installs the locked Python dependencies, pinned Snowflake connector,
 and locked viewer dependencies. The check command runs formatting, lint, Python and
@@ -74,6 +88,9 @@ allowed_views = [
 ]
 ```
 
+On Windows, TOML accepts a forward-slash path such as
+`C:/Users/you/.snowglobe/snowglobe-test-key.p8` without backslash escaping.
+
 Field rules:
 
 - `account` is the identifier expected by the Snowflake Python connector;
@@ -92,6 +109,21 @@ Make both files owner-only regular files:
 chmod 600 /absolute/private/path/connections.toml
 chmod 600 /absolute/private/path/snowglobe-test-key.p8
 ```
+
+On Windows, create them on local NTFS storage, then remove inherited access and grant
+your current account read/write access. Run this from PowerShell after setting the two
+paths:
+
+```powershell
+$config = "$env:USERPROFILE\.snowglobe\connections.toml"
+$key = "$env:USERPROFILE\.snowglobe\snowglobe-test-key.p8"
+$account = "$env:USERDOMAIN\$env:USERNAME"
+icacls $config /inheritance:r /grant:r "${account}:(R,W)"
+icacls $key /inheritance:r /grant:r "${account}:(R,W)"
+```
+
+Snowglobe verifies the owner SID and ACL on the opened file handle and rejects all
+reparse points. Local System and Administrators remain privileged, like POSIX root.
 
 See the [configuration reference](configuration.md) for the exact contract and file
 checks.
@@ -140,6 +172,9 @@ Confirm runtime health:
 ```bash
 curl --fail --silent http://127.0.0.1:8000/healthz
 ```
+
+On Windows PowerShell, use
+`Invoke-RestMethod http://127.0.0.1:8000/healthz`.
 
 The MCP endpoint is `http://127.0.0.1:8000/mcp`. Vite prints the viewer URL, normally
 `http://127.0.0.1:5173/`. Keep both processes and the MCP client on the same local
@@ -246,6 +281,15 @@ pi install "git:github.com/curtisalexander/snowglobe@${SNOWGLOBE_REF}"
 pi list
 ```
 
+On Windows PowerShell:
+
+```powershell
+if (git status --short) { throw "The checkout must be clean." }
+$snowglobeRef = git rev-parse HEAD
+pi install "git:github.com/curtisalexander/snowglobe@$snowglobeRef"
+pi list
+```
+
 Restart Pi and confirm `submit_read_query` and `get_query_status` are available. The
 package registers typed tools that invoke Snowglobe's fixed-loopback, result-free CLI;
 it also bundles workflow guidance that Pi discovers as the `snowglobe` skill. The
@@ -263,6 +307,12 @@ printf '%s\n' 'SELECT * FROM YOUR_TEST_DATABASE.YOUR_TEST_SCHEMA.YOUR_APPROVED_V
   | uv run snowglobe submit \
       --purpose "Constrained Snowglobe MVP canary check" \
       --ttl 300
+```
+
+On Windows PowerShell:
+
+```powershell
+'SELECT * FROM YOUR_TEST_DATABASE.YOUR_TEST_SCHEMA.YOUR_APPROVED_VIEW' | uv run snowglobe submit --purpose "Constrained Snowglobe MVP canary check" --ttl 300
 ```
 
 Retain only the returned opaque ID and run

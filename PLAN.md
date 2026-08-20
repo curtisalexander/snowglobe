@@ -2,7 +2,7 @@
 
 **Status:** Implementation is ready for external connected-MVP validation; Gate 5 connected evidence is next
 **Last updated:** August 20, 2026
-**Current decision:** [ADR 0014](docs/decisions/0014-pi-extension-package.md)
+**Current decision:** [ADR 0015](docs/decisions/0015-native-windows-credential-files.md)
 **Retained source proposal:** [architecture-proposal.md](docs/architecture-proposal.md)
 
 ## 1. Outcome
@@ -383,10 +383,11 @@ virtualization, export, or polished packaging.
 
 ## 12. Immediate next items
 
-Gates 1–4 and the connection-free MVP handoff are complete. A fresh POSIX clone can
-install locked dependencies with `./scripts/setup.sh`, run the complete local suite
-with `./scripts/check.sh`, configure a Streamable HTTP MCP client, and follow the exact
-Gate 5 campaign. The external operator must now configure the dedicated non-production
-test profile, run the value-free preflight, and independently verify role grants,
-allowlisted objects, warehouse, and resource monitor before any query is submitted.
-Snowglobe must not be described as connected-MVP verified until that evidence passes.
+Gates 1–4 and the connection-free MVP handoff are complete. A fresh Linux, macOS, or
+native Windows clone can install locked dependencies and run the complete local suite
+with the platform setup and check scripts, configure a Streamable HTTP MCP client, and
+follow the exact Gate 5 campaign. The external operator must now configure the
+dedicated non-production test profile, run the value-free preflight, and independently
+verify role grants, allowlisted objects, warehouse, and resource monitor before any
+query is submitted. Snowglobe must not be described as connected-MVP verified until
+that evidence passes.

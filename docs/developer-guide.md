@@ -104,20 +104,24 @@ snowglobe/
 ├── docs/decisions/         Accepted architecture decisions
 ├── docs/                   Runbooks, threat model, and implementation guides
 ├── scripts/setup.sh        Locked developer installation
+├── scripts/setup.ps1       Locked Windows developer installation
 ├── scripts/check.sh        Complete connection-free verification
+├── scripts/check.ps1       Complete Windows connection-free verification
 ├── pyproject.toml          Python package, entry points, and tool configuration
 └── package.json            Viewer commands and Pi package manifest
 ```
 
 ### Developer setup and daily loop
 
-On Linux or macOS, install Python 3.12+, `uv`, Node.js 22.12+, and npm. Then, from a
-fresh clone:
+On Linux, macOS, or Windows, install Python 3.12+, `uv`, Node.js 22.12+, and npm. Then,
+from a fresh clone on Linux or macOS:
 
 ```bash
 ./scripts/setup.sh
 ./scripts/check.sh
 ```
+
+On Windows PowerShell, run `./scripts/setup.ps1` and `./scripts/check.ps1`.
 
 The setup script installs the exact Python lock, including the optional Snowflake
 connector, and the exact npm lock. The check script is connection-free and is the
@@ -236,9 +240,10 @@ warehouse, role, and `allowed_views`. Unknown or missing fields fail.
 
 Before parsing either the TOML or private key, [`read_secure_file()`](../src/snowglobe/secure_file.py):
 
-1. opens the path with `O_NOFOLLOW`;
-2. verifies it is a regular file owned by the effective user;
-3. accepts only owner read/write bits (`0400` or `0600`); and
+1. opens the path without following a final POSIX symlink or Windows reparse point;
+2. verifies it is a regular file owned by the effective user or current user SID;
+3. accepts only owner read/write bits (`0400` or `0600`) on POSIX, or an ACL limited
+   to the user and Windows-equivalent privileged host principals; and
 4. reads from the already-verified descriptor.
 
 [`load_private_key()`](../src/snowglobe/private_key.py) parses an unencrypted PEM or DER

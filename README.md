@@ -100,9 +100,10 @@ running as that analyst.
 
 ## Local development
 
-The credential-bearing MVP runtime requires Linux or macOS with POSIX owner permission
-checks and `O_NOFOLLOW`, Python 3.12 with `uv`, plus Node.js 22.12 or newer and npm.
-Native Windows is not currently supported for connected execution.
+The credential-bearing MVP runtime supports Linux, macOS, and native Windows 10/11.
+Windows credential files must be on local NTFS storage so Snowglobe can enforce owner,
+ACL, and reparse-point checks. All platforms require Python 3.12 with `uv`, plus
+Node.js 22.12 or newer and npm.
 
 From a fresh clone, install the exact locked dependencies, including the optional
 Snowflake connector:
@@ -111,11 +112,15 @@ Snowflake connector:
 ./scripts/setup.sh
 ```
 
+On Windows PowerShell, run `./scripts/setup.ps1` instead.
+
 Run the complete connection-free suite with one command:
 
 ```bash
 ./scripts/check.sh
 ```
+
+On Windows PowerShell, run `./scripts/check.ps1` instead.
 
 To start in fail-closed development mode without Snowflake execution:
 
@@ -181,11 +186,21 @@ before starting either process. The Snowflake executor reads a local
 `connections.toml` profile. Start from
 [`connections.example.toml`](connections.example.toml); never commit the real file or
 private key. Snowglobe accepts both files only when they are regular files owned by the
-current user, are not symlinks, and grant no permissions to the group or other users.
-The owner must have read permission and may have write permission (`0400` or `0600`):
+current user, are not symlinks or Windows reparse points, and grant no access to
+unprivileged other users. On POSIX, the owner must have read permission and may have
+write permission (`0400` or `0600`):
 
 ```bash
 chmod 600 connections.toml /path/to/snowflake-key.p8
+```
+
+On Windows, remove inherited ACL entries and grant only your account read/write access
+(Local System and Administrators remain privileged like POSIX root):
+
+```powershell
+$account = "$env:USERDOMAIN\$env:USERNAME"
+icacls C:\private\connections.toml /inheritance:r /grant:r "${account}:(R,W)"
+icacls C:\private\snowflake-key.p8 /inheritance:r /grant:r "${account}:(R,W)"
 ```
 
 Validate the local profile and key without connecting to Snowflake:

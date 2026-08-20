@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -135,6 +136,7 @@ def test_rejects_unsafe_configuration_permissions(tmp_path: Path, mode: int) -> 
     assert str(caught.value) == ""
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX ownership test")
 def test_rejects_configuration_not_owned_by_current_user(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -162,6 +164,7 @@ def test_rejects_configuration_symlink(tmp_path: Path) -> None:
     assert str(caught.value) == ""
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX FIFO test")
 def test_rejects_configuration_fifo_without_blocking(tmp_path: Path) -> None:
     path = tmp_path / "sensitive-name.toml"
     os.mkfifo(path, mode=0o600)

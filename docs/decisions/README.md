@@ -18,3 +18,4 @@ Snowglobe records consequential technical and security decisions as architecture
 | [0012](0012-svelte-viewer.md) | Accepted | Use plain Svelte for the local viewer UI |
 | [0013](0013-result-free-cli-adapter.md) | Accepted | Expose the closed control plane to shell-only agents through a CLI client of the local MCP service |
 | [0014](0014-pi-extension-package.md) | Accepted | Package two native Pi tools and a workflow skill over the result-free CLI |
+| [0015](0015-native-windows-credential-files.md) | Accepted | Enforce native Windows handle and ACL checks for credential files |

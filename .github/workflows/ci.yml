@@ -23,6 +23,25 @@ jobs:
       - run: uv run ty check
       - run: uv run pytest
 
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: ./scripts/setup.ps1
+      - run: uv run ruff check .
+      - run: uv run ty check
+      - run: uv run pytest
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
   viewer:
     runs-on: ubuntu-latest
     steps:

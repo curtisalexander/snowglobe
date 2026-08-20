@@ -83,15 +83,16 @@ artifacts.
 
 ## 3. Local setup
 
-Use Linux or macOS for the credential-bearing MVP runtime. Native Windows does not
-provide the reviewed POSIX owner and no-follow file checks and is not currently a
-supported connected host.
+Use Linux, macOS, or native Windows 10/11 for the credential-bearing MVP runtime.
+Windows configuration and key files must be on local NTFS storage.
 
 Install the exact locked project dependencies and optional connector:
 
 ```bash
 ./scripts/setup.sh
 ```
+
+On Windows PowerShell, run `./scripts/setup.ps1`.
 
 Copy `connections.example.toml` to an untracked path outside the repository when
 possible. Populate exactly one test profile. `allowed_views` must contain only the
@@ -105,6 +106,20 @@ group or other permissions. The owner must have read permission:
 chmod 600 /absolute/private/path/connections.toml
 chmod 600 /absolute/private/path/snowglobe-test-key.p8
 ```
+
+On Windows PowerShell, remove inherited access and grant the current account only
+read/write access:
+
+```powershell
+$config = "$env:USERPROFILE\.snowglobe\connections.toml"
+$key = "$env:USERPROFILE\.snowglobe\snowglobe-test-key.p8"
+$account = "$env:USERDOMAIN\$env:USERNAME"
+icacls $config /inheritance:r /grant:r "${account}:(R,W)"
+icacls $key /inheritance:r /grant:r "${account}:(R,W)"
+```
+
+Snowglobe rejects Windows reparse points and ACL access for unprivileged other
+principals. Local System and Administrators remain privileged like POSIX root.
 
 Validate configuration, key parsing, and the SQL view allowlist without connecting:
 
@@ -167,6 +182,12 @@ On macOS, use `lsof` instead:
 
 ```bash
 lsof -nP -iTCP:8000 -iTCP:5173 -sTCP:LISTEN
+```
+
+On Windows PowerShell, inspect both listeners:
+
+```powershell
+Get-NetTCPConnection -State Listen | Where-Object LocalPort -In 8000,5173 | Select-Object LocalAddress,LocalPort,OwningProcess
 ```
 
 The MCP endpoint is `http://127.0.0.1:8000/mcp`. Vite prints its loopback viewer URL,
@@ -306,8 +327,8 @@ and expected grants/usage. Opaque request IDs may be recorded but are not requir
 not retain query results, screenshots, SQL text, profile values, object/account names,
 query IDs, driver errors, query-history rows, timings, sizes, or usage values.
 
-Finally run `./scripts/check.sh` and retain only the individual command names, exit
-status, and summary counts. The script runs:
+Finally run `./scripts/check.sh` (or `./scripts/check.ps1` on Windows) and retain only
+the individual command names, exit status, and summary counts. The script runs:
 
 ```bash
 uv run ruff format --check .

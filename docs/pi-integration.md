@@ -70,6 +70,15 @@ pi install "git:github.com/curtisalexander/snowglobe@${SNOWGLOBE_REF}"
 pi list
 ```
 
+On Windows PowerShell:
+
+```powershell
+if (git status --short) { throw "The checkout must be clean." }
+$snowglobeRef = git rev-parse HEAD
+pi install "git:github.com/curtisalexander/snowglobe@$snowglobeRef"
+pi list
+```
+
 Or install only for the current trusted project:
 
 ```bash
@@ -78,6 +87,9 @@ SNOWGLOBE_REF="$(git rev-parse HEAD)"
 pi install "git:github.com/curtisalexander/snowglobe@${SNOWGLOBE_REF}" -l
 pi list
 ```
+
+On Windows PowerShell, use the preceding commands with `-l` appended to the
+`pi install` command.
 
 The commit pin is required for the connected MVP campaign. Record the same revision in
 the private evidence template. An unpinned Git source follows a moving repository head
@@ -95,6 +107,8 @@ To use an existing Snowglobe checkout without installing or copying files:
 ```bash
 pi -e /absolute/path/to/snowglobe
 ```
+
+On Windows, pass the checkout path such as `pi -e C:/src/snowglobe`.
 
 This local-checkout form runs its current files, including uncommitted changes. Do not
 use it for connected evidence unless that exact checkout was reviewed and recorded.
