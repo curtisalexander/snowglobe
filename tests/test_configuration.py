@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -67,7 +68,7 @@ def test_builds_only_explicit_connector_arguments(tmp_path: Path) -> None:
     connections_path = tmp_path / "connections.toml"
     write_secure(
         connections_path,
-        VALID_CONNECTIONS.replace("~/snowglobe-key.p8", str(key_path)),
+        VALID_CONNECTIONS.replace('"~/snowglobe-key.p8"', json.dumps(str(key_path))),
     )
 
     arguments = build_connector_arguments(load_snowflake_profile(connections_path, "default"))
