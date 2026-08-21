@@ -35,14 +35,16 @@ def test_admits_before_registering_pending_work_and_completes_in_background() ->
                 await release.wait()
                 return source
 
-            return work
+            return sql, work
 
         executor = BackgroundQueryExecutor(broker=broker, admit=admit)
-        request = await executor.submit(
+        submission = await executor.submit(
             sql="select 1",
             requested_ttl=timedelta(minutes=5),
         )
+        request = submission.request
 
+        assert submission.governed_sql == "select 1"
         assert request.status is RequestStatus.PENDING
         await started.wait()
         assert broker.get_request(request.request_id).status is RequestStatus.PENDING
@@ -86,13 +88,14 @@ def test_background_failure_becomes_failed_state() -> None:
                 mark_started(None)
                 raise RuntimeError(canary)
 
-            return work
+            return "SELECT 1", work
 
         executor = BackgroundQueryExecutor(broker=broker, admit=admit)
-        request = await executor.submit(
+        submission = await executor.submit(
             sql="select 1",
             requested_ttl=timedelta(minutes=5),
         )
+        request = submission.request
 
         while broker.get_request(request.request_id).status is RequestStatus.PENDING:
             await asyncio.sleep(0)
@@ -110,7 +113,7 @@ def test_close_rejects_later_submissions() -> None:
                 mark_started(None)
                 return Source()
 
-            return work
+            return "SELECT 1", work
 
         executor = BackgroundQueryExecutor(broker=broker, admit=admit)
         await executor.close()

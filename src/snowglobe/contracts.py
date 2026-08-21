@@ -25,11 +25,15 @@ class QueryReceipt(BaseModel):
     status: ReceiptStatus
     request_id: str = Field(pattern=r"^[A-Za-z0-9_-]{20,32}$")
     reason_code: ReasonCode
+    governed_sql: str | None = Field(min_length=1)
 
     @model_validator(mode="after")
-    def require_consistent_status_and_reason(self) -> "QueryReceipt":
-        if (self.status is ReceiptStatus.ACCEPTED) is not (self.reason_code is ReasonCode.NONE):
-            raise ValueError("inconsistent submission receipt")
+    def require_consistent_submission(self) -> "QueryReceipt":
+        accepted = self.status is ReceiptStatus.ACCEPTED
+        if accepted is not (self.reason_code is ReasonCode.NONE):
+            raise ValueError("inconsistent submission status and reason")
+        if accepted is not (self.governed_sql is not None):
+            raise ValueError("inconsistent submission status and governed SQL")
         return self
 
 

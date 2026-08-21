@@ -318,19 +318,19 @@ they must originate in the administrator-approved view.
 > Use Snowglobe to submit this governed read query:
 > `SELECT * FROM YOUR_TEST_DATABASE.YOUR_TEST_SCHEMA.YOUR_APPROVED_VIEW`.
 > Use a TTL of 300 seconds.
-> Return the opaque submission receipt, poll the request with Snowglobe until it is
-> terminal, and report only the lifecycle receipt.
+> Return the submission receipt, including the governed SQL, poll the request with
+> Snowglobe until it is terminal, and report the lifecycle receipt.
 
 No SQL file is required: the agent writes the `sql` tool argument from this request.
 Snowglobe governs and regenerates that SQL rather than generating SQL from natural
-language itself. Immediately before the connector call, the `snowglobe-local` terminal
-prints the request ID and exact regenerated SQL being attempted, including the enforced
-row cap. This operator output remains outside MCP responses; treat any terminal capture
-as sensitive and do not paste it back into the agent conversation.
+language itself. The accepted submission receipt returns the request ID and exact
+regenerated SQL being attempted, including the enforced row cap. Immediately before the
+connector call, the `snowglobe-local` terminal prints the same pair. Treat model
+transcripts and terminal captures as sensitive when SQL contains literals.
 
 Expected agent-visible behavior:
 
-1. submission returns only `status`, `request_id`, and `reason_code`;
+1. submission returns only `status`, `request_id`, `reason_code`, and `governed_sql`;
 2. status polling returns only `request_id` and `status`; and
 3. a successful request eventually reaches `complete` without rows, schema, counts,
    timing, errors, Snowflake identifiers, or a result URL entering the conversation.

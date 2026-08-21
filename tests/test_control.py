@@ -26,7 +26,7 @@ def test_control_plane_submits_and_polls_without_result_data() -> None:
             mark_started(None)
             return Source()
 
-        return work
+        return "SELECT 'PRIVATE_RESULT_VALUE' LIMIT 51", work
 
     control = ControlPlane(
         broker=broker,
@@ -46,6 +46,7 @@ def test_control_plane_submits_and_polls_without_result_data() -> None:
             "status": "accepted",
             "request_id": submitted.request_id,
             "reason_code": "NONE",
+            "governed_sql": "SELECT 'PRIVATE_RESULT_VALUE' LIMIT 51",
         }
         assert status.model_dump(mode="json") == {
             "request_id": submitted.request_id,
@@ -77,6 +78,8 @@ def test_control_plane_maps_policy_and_service_failures_to_fixed_receipts() -> N
             requested_ttl=timedelta(minutes=1),
         )
         assert policy.reason_code == "POLICY_REJECTED"
+        assert policy.governed_sql is None
         assert unavailable.reason_code == "SERVICE_UNAVAILABLE"
+        assert unavailable.governed_sql is None
 
     asyncio.run(exercise())

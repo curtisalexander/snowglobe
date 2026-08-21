@@ -17,8 +17,9 @@ code-review order.
 Snowglobe lets a coding agent submit governed read-only SQL without putting the query
 result into a model-facing response. Agents may use MCP directly or, when they do not
 support MCP, call the result-free `snowglobe` CLI. Submission runs asynchronously and
-returns an opaque request ID. The agent may poll that ID for a small lifecycle state,
-while the analyst uses the same ID in a local viewer to inspect the result.
+returns the exact governed SQL with an opaque request ID. The agent may poll that ID for
+a small lifecycle state, while the analyst uses the same ID in a local viewer to inspect
+the result.
 
 ```text
                        MCP or CLI — control only
@@ -26,7 +27,7 @@ while the analyst uses the same ID in a local viewer to inspect the result.
 │ Analyst's    │────▶│ local Snowglobe runtime │────▶│ Snowflake │
 │ coding agent │◀────│ submit + status         │     │           │
 └──────────────┘     └────────────┬────────────┘     └─────┬─────┘
-       opaque ID + lifecycle      │                        │
+    governed SQL + ID + lifecycle │                        │
                                   │ shared local broker    │
                                   ▼                        │
                        ┌──────────────────────┐            │
@@ -83,8 +84,8 @@ and [connected validation runbook](docs/constrained-mvp-runbook.md) now exist.
 
 MCP and the result-free CLI may return only:
 
-- an accepted/rejected submission receipt with an opaque request ID and fixed reason;
-  or
+- an accepted/rejected submission receipt with an opaque request ID, fixed reason, and
+  exact governed SQL for accepted work (`null` when rejected); or
 - an opaque request ID plus `pending`, `complete`, `failed`, `cancelled`, `expired`,
   `not_found`, or `service_unavailable`.
 
@@ -150,12 +151,12 @@ description and sends it in the `sql` field of `submit_read_query`; Snowglobe it
 does not translate natural language into SQL. The CLI likewise accepts any standard
 input, so a heredoc, pipe, or redirected file is only a caller preference.
 
-Before each Snowflake connector call, the foreground `snowglobe-local` terminal prints
-the opaque request ID and the exact governed SQL being attempted. This is the
-SQLGlot-regenerated statement after policy checks and the server-owned row cap, so it
-may differ in formatting and limit from the agent's draft. The SQL remains absent from
-MCP, CLI, and Pi responses. Because SQL can contain sensitive literals, protect any
-terminal capture or service log and do not paste it into an agent conversation.
+The accepted MCP, CLI, and Pi submission receipt includes the opaque request ID and the
+exact governed SQL being attempted. This is the SQLGlot-regenerated statement after
+policy checks and the server-owned row cap, so it may differ in formatting and limit
+from the agent's draft. The foreground `snowglobe-local` terminal also prints both
+immediately before each connector call. Because SQL can contain sensitive literals,
+protect model transcripts, terminal captures, and service logs accordingly.
 
 The CLI does not run a second executor and has no result-reading command. It requires
 `snowglobe-local` to remain running because the daemon owns the in-memory request and

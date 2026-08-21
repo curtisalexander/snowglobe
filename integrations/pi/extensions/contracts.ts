@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 
 const requestIdPattern = /^[A-Za-z0-9_-]{20,32}$/;
-const submissionKeys = ["reason_code", "request_id", "status"];
+const submissionKeys = ["governed_sql", "reason_code", "request_id", "status"];
 const statusKeys = ["request_id", "status"];
 
 const reasonCodes = new Set([
@@ -24,6 +24,7 @@ export interface SubmissionReceipt {
   status: "accepted" | "rejected";
   request_id: string;
   reason_code: "NONE" | "INVALID_REQUEST" | "POLICY_REJECTED" | "SERVICE_UNAVAILABLE";
+  governed_sql: string | null;
 }
 
 export interface StatusReceipt {
@@ -62,6 +63,8 @@ export function parseSubmissionReceipt(text: string): SubmissionReceipt | undefi
     return undefined;
   }
   if ((value.status === "accepted") !== (value.reason_code === "NONE")) return undefined;
+  if ((value.status === "accepted") !== (typeof value.governed_sql === "string")) return undefined;
+  if (typeof value.governed_sql === "string" && value.governed_sql.length === 0) return undefined;
   return value as unknown as SubmissionReceipt;
 }
 
@@ -86,6 +89,7 @@ export function unavailableSubmission(): SubmissionReceipt {
     status: "rejected",
     request_id: newRequestId(),
     reason_code: "SERVICE_UNAVAILABLE",
+    governed_sql: null,
   };
 }
 

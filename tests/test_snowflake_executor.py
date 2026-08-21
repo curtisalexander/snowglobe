@@ -132,13 +132,16 @@ def test_acceptance_waits_for_cursor_registration_then_retrieves_incrementally()
         broker = InProcessBroker(maximum_pending_requests=1)
         executor = _executor(broker, cursor, events)
 
-        request = await executor.submit(
+        submission = await executor.submit(
             sql=f"select VALUE from {ALLOWED_VIEW}",
             requested_ttl=timedelta(minutes=5),
         )
+        request = submission.request
 
+        assert submission.governed_sql.endswith("LIMIT 51")
         assert broker.get_request(request.request_id).status is RequestStatus.PENDING
         assert await asyncio.to_thread(execute_started.wait, 1)
+        assert submission.governed_sql == cursor.executed_sql
         assert cursor.executed_sql.endswith("LIMIT 51")
         assert cursor.execute_timeout == 60
 
@@ -170,10 +173,11 @@ def test_prints_the_exact_governed_sql_with_its_request_id(
         broker = InProcessBroker()
         executor = _executor(broker, cursor, events)
 
-        request = await executor.submit(
+        submission = await executor.submit(
             sql=f"select VALUE from {ALLOWED_VIEW}",
             requested_ttl=timedelta(minutes=5),
         )
+        request = submission.request
         while broker.get_request(request.request_id).status is RequestStatus.PENDING:
             await asyncio.sleep(0)
         return request.request_id, cursor
@@ -193,10 +197,11 @@ def test_empty_result_preserves_the_connector_arrow_schema() -> None:
         broker = InProcessBroker()
         executor = _executor(broker, cursor, events)
 
-        request = await executor.submit(
+        submission = await executor.submit(
             sql=f"select * from {ALLOWED_VIEW}",
             requested_ttl=timedelta(minutes=5),
         )
+        request = submission.request
         while broker.get_request(request.request_id).status is RequestStatus.PENDING:
             await asyncio.sleep(0)
 
@@ -215,10 +220,11 @@ def test_oversized_result_fails_before_publication_and_closes_resources() -> Non
         broker = InProcessBroker()
         executor = _executor(broker, cursor, events)
 
-        request = await executor.submit(
+        submission = await executor.submit(
             sql=f"select VALUE from {ALLOWED_VIEW}",
             requested_ttl=timedelta(minutes=5),
         )
+        request = submission.request
         while broker.get_request(request.request_id).status is RequestStatus.PENDING:
             await asyncio.sleep(0)
 
@@ -241,10 +247,11 @@ def test_cleanup_failure_does_not_publish_an_otherwise_admitted_result() -> None
             connection_close_error=RuntimeError("CLEANUP_ERROR_CANARY"),
         )
 
-        request = await executor.submit(
+        submission = await executor.submit(
             sql=f"select VALUE from {ALLOWED_VIEW}",
             requested_ttl=timedelta(minutes=5),
         )
+        request = submission.request
         while broker.get_request(request.request_id).status is RequestStatus.PENDING:
             await asyncio.sleep(0)
 
@@ -266,10 +273,11 @@ def test_cancellation_targets_active_cursor_and_remains_cancelled() -> None:
         broker = InProcessBroker()
         executor = _executor(broker, cursor, events)
 
-        request = await executor.submit(
+        submission = await executor.submit(
             sql=f"select VALUE from {ALLOWED_VIEW}",
             requested_ttl=timedelta(minutes=5),
         )
+        request = submission.request
         assert broker.cancel(request.request_id).status is RequestStatus.CANCELLED
         await executor.close()
 

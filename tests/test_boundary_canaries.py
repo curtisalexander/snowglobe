@@ -55,7 +55,8 @@ def test_result_canaries_stay_out_of_mcp_and_exist_in_the_viewer_data_path() -> 
     broker = InProcessBroker(maximum_pending_requests=1)
     source = CanarySource()
     sql_canary = "SQL_INPUT_CANARY"
-    error_canary = "INTERNAL_DRIVER_ERROR_CANARY"
+    failed_sql_canary = "FAILED_SQL_INPUT_CANARY"
+    driver_error_canary = "INTERNAL_DRIVER_ERROR_CANARY"
 
     def admit(sql: str):
         async def work(
@@ -63,12 +64,12 @@ def test_result_canaries_stay_out_of_mcp_and_exist_in_the_viewer_data_path() -> 
             mark_started,
         ) -> ArrowBatchSource:
             mark_started(None)
-            if error_canary in sql:
-                raise RuntimeError(error_canary)
+            if failed_sql_canary in sql:
+                raise RuntimeError(driver_error_canary)
             assert sql_canary in sql
             return source
 
-        return work
+        return sql, work
 
     mcp_server = create_server(
         ControlPlane(
@@ -88,6 +89,7 @@ def test_result_canaries_stay_out_of_mcp_and_exist_in_the_viewer_data_path() -> 
             )
             assert accepted.structured_content is not None
             request_id = accepted.structured_content["request_id"]
+            assert accepted.structured_content["governed_sql"] == f"select '{sql_canary}'"
             while broker.get_request(request_id).status is RequestStatus.PENDING:
                 await asyncio.sleep(0)
             complete = await client.call_tool("get_query_status", {"request_id": request_id})
@@ -99,12 +101,15 @@ def test_result_canaries_stay_out_of_mcp_and_exist_in_the_viewer_data_path() -> 
             failed_submission = await client.call_tool(
                 "submit_read_query",
                 {
-                    "sql": f"select '{error_canary}'",
+                    "sql": f"select '{failed_sql_canary}'",
                     "requested_ttl": 60,
                 },
             )
             assert failed_submission.structured_content is not None
             failed_id = failed_submission.structured_content["request_id"]
+            assert failed_submission.structured_content["governed_sql"] == (
+                f"select '{failed_sql_canary}'"
+            )
             while broker.get_request(failed_id).status is RequestStatus.PENDING:
                 await asyncio.sleep(0)
             failed = await client.call_tool("get_query_status", {"request_id": failed_id})
@@ -126,9 +131,11 @@ def test_result_canaries_stay_out_of_mcp_and_exist_in_the_viewer_data_path() -> 
         "SECOND_BATCH_CANARY",
         "SECOND_BINARY_CANARY",
     )
-    private_canaries = (*result_canaries, sql_canary, error_canary)
-    for canary in private_canaries:
+    for canary in result_canaries:
         assert canary not in model_visible
+    assert sql_canary in model_visible
+    assert failed_sql_canary in model_visible
+    assert driver_error_canary not in model_visible
 
     viewer = TestClient(create_app(broker=broker, admission_limits=MVP_ARROW_LIMITS))
     listed = viewer.get("/v1/requests")
@@ -138,6 +145,7 @@ def test_result_canaries_stay_out_of_mcp_and_exist_in_the_viewer_data_path() -> 
 
     assert public_error.json() == {"error": "not_found"}
     public_metadata = listed.content + opened.content + public_error.content
+    private_canaries = (*result_canaries, sql_canary, failed_sql_canary, driver_error_canary)
     for canary in private_canaries:
         assert canary.encode() not in public_metadata
         assert canary not in str(listed.request.url)

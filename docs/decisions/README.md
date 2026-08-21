@@ -17,10 +17,11 @@ Snowglobe records consequential technical and security decisions as architecture
 | [0011](0011-bounded-snowflake-execution.md) | Superseded in part by [0017](0017-minimal-model-context-boundary.md) | Bounded Snowflake execution and result retention |
 | [0012](0012-svelte-viewer.md) | Accepted | Use plain Svelte for the local viewer UI |
 | [0013](0013-result-free-cli-adapter.md) | Accepted | Expose the closed control plane to shell-only agents through a CLI client of the local MCP service |
-| [0014](0014-pi-extension-package.md) | Accepted; workflow skill superseded by [0017](0017-minimal-model-context-boundary.md) | Package two native Pi tools over the result-free CLI |
+| [0014](0014-pi-extension-package.md) | Accepted; workflow skill superseded by [0017](0017-minimal-model-context-boundary.md), SQL-result exclusion superseded by [0021](0021-return-governed-sql-in-submission-receipts.md) | Package two native Pi tools over the result-free CLI |
 | [0015](0015-native-windows-credential-files.md) | Superseded by [0017](0017-minimal-model-context-boundary.md) | Enforce native Windows handle and ACL checks for credential files |
 | [0016](0016-separate-snowflake-and-snowglobe-configuration.md) | Accepted; file checks superseded by [0017](0017-minimal-model-context-boundary.md) | Separate native Snowflake connections from Snowglobe query policy |
-| [0017](0017-minimal-model-context-boundary.md) | Accepted; implementation refined by [0018](0018-minimal-boundary-cleanup.md) and SQL policy by [0019](0019-relation-centric-sql-authorization.md) | Keep only the model-facing result boundary and ordinary correctness controls |
+| [0017](0017-minimal-model-context-boundary.md) | Accepted; implementation refined by [0018](0018-minimal-boundary-cleanup.md), SQL policy by [0019](0019-relation-centric-sql-authorization.md), and SQL receipt boundary by [0021](0021-return-governed-sql-in-submission-receipts.md) | Keep only the model-facing result boundary and ordinary correctness controls |
 | [0018](0018-minimal-boundary-cleanup.md) | Accepted | Apply the minimal boundary at model-facing adapters and bound local request history |
 | [0019](0019-relation-centric-sql-authorization.md) | Accepted | Commit to strict statements and relation sources with permissive query expressions |
-| [0020](0020-print-governed-sql-for-the-operator.md) | Accepted | Print exact governed SQL in the foreground runtime for the local operator |
+| [0020](0020-print-governed-sql-for-the-operator.md) | Accepted; terminal-only restriction superseded by [0021](0021-return-governed-sql-in-submission-receipts.md) | Print exact governed SQL in the foreground runtime for the local operator |
+| [0021](0021-return-governed-sql-in-submission-receipts.md) | Accepted | Return exact governed SQL in the existing submission receipt |

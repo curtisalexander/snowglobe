@@ -11,6 +11,7 @@ def test_receipt_rejects_additional_fields() -> None:
                 "status": "accepted",
                 "request_id": "01JABCDEFGHJKMNPQRSTVWXYZ",
                 "reason_code": "NONE",
+                "governed_sql": "SELECT 1 LIMIT 51",
                 "row_count": 42,
             }
         )
@@ -34,14 +35,28 @@ def test_status_receipt_rejects_result_metadata() -> None:
             "status": "accepted",
             "request_id": "01JABCDEFGHJKMNPQRSTVWXYZ",
             "reason_code": "SERVICE_UNAVAILABLE",
+            "governed_sql": "SELECT 1 LIMIT 51",
         },
         {
             "status": "rejected",
             "request_id": "01JABCDEFGHJKMNPQRSTVWXYZ",
             "reason_code": "NONE",
+            "governed_sql": None,
+        },
+        {
+            "status": "accepted",
+            "request_id": "01JABCDEFGHJKMNPQRSTVWXYZ",
+            "reason_code": "NONE",
+            "governed_sql": None,
+        },
+        {
+            "status": "rejected",
+            "request_id": "01JABCDEFGHJKMNPQRSTVWXYZ",
+            "reason_code": "POLICY_REJECTED",
+            "governed_sql": "SELECT 1 LIMIT 51",
         },
     ],
 )
-def test_receipt_rejects_inconsistent_status_and_reason(receipt: dict[str, str]) -> None:
+def test_receipt_rejects_inconsistent_fields(receipt: dict[str, str | None]) -> None:
     with pytest.raises(ValidationError):
         QueryReceipt.model_validate(receipt)

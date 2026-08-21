@@ -10,7 +10,12 @@ import {
 const requestId = "abcdefghijklmnopqrstuvwx";
 
 test("accepts only exact submission receipts", () => {
-  const receipt = { status: "accepted", request_id: requestId, reason_code: "NONE" };
+  const receipt = {
+    status: "accepted",
+    request_id: requestId,
+    reason_code: "NONE",
+    governed_sql: "SELECT 1 LIMIT 51",
+  };
   assert.deepEqual(parseSubmissionReceipt(JSON.stringify(receipt)), receipt);
   assert.equal(parseSubmissionReceipt(JSON.stringify({ ...receipt, rows: ["RESULT_CANARY"] })), undefined);
   assert.equal(
@@ -18,6 +23,23 @@ test("accepts only exact submission receipts", () => {
       JSON.stringify({ status: "rejected", request_id: requestId, reason_code: "NONE" }),
     ),
     undefined,
+  );
+  assert.equal(parseSubmissionReceipt(JSON.stringify({ ...receipt, governed_sql: null })), undefined);
+  assert.deepEqual(
+    parseSubmissionReceipt(
+      JSON.stringify({
+        status: "rejected",
+        request_id: requestId,
+        reason_code: "POLICY_REJECTED",
+        governed_sql: null,
+      }),
+    ),
+    {
+      status: "rejected",
+      request_id: requestId,
+      reason_code: "POLICY_REJECTED",
+      governed_sql: null,
+    },
   );
 });
 
@@ -29,7 +51,13 @@ test("accepts only exact lifecycle receipts", () => {
 });
 
 test("fixed unavailable receipts contain only allowlisted fields", () => {
-  assert.deepEqual(Object.keys(unavailableSubmission()).sort(), ["reason_code", "request_id", "status"]);
+  assert.deepEqual(Object.keys(unavailableSubmission()).sort(), [
+    "governed_sql",
+    "reason_code",
+    "request_id",
+    "status",
+  ]);
+  assert.equal(unavailableSubmission().governed_sql, null);
   assert.deepEqual(unavailableStatus(requestId), {
     request_id: requestId,
     status: "service_unavailable",

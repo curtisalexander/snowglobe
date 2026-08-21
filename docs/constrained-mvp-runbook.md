@@ -211,10 +211,11 @@ identifiers fully qualified. Do not put a result canary literal in SQL; the cana
 originate in the approved view.
 
 The accepted MCP, Pi tool, or CLI response must contain only `status`, `request_id`,
-and `reason_code`. Poll `get_query_status` with only that `request_id`; for raw CLI
-diagnosis, run `uv run snowglobe status '<opaque-request-id>'`. Each response must
-contain only `request_id` and `status`. Continue until a terminal state. Do not infer
-rows, counts, timing, or errors from the lifecycle state.
+`reason_code`, and the exact non-empty `governed_sql`. A rejected response has the same
+shape with `governed_sql: null`. Poll `get_query_status` with only that `request_id`; for
+raw CLI diagnosis, run `uv run snowglobe status '<opaque-request-id>'`. Each response
+must contain only `request_id` and `status`. Continue until a terminal state. Do not
+infer rows, counts, timing, or errors from the lifecycle state.
 
 For a `complete` request, open the viewer, select the recent request or paste the same
 ID, and choose **Open result**. Confirm the expected non-sensitive values and column
@@ -275,12 +276,12 @@ closed fields. For Pi, check that exactly two tools are registered and tool cont
 one closed receipt. For CLI and Pi subprocess cases, check that stdout is bounded to
 one closed JSON receipt and stderr contains no submitted or result data. Result values
 and column names must be absent from all captured MCP traffic, Pi tool results, and CLI
-output; submitted SQL must not be reflected in those responses. Confirm that the
-Snowflake connector logger remains disabled because it is not safe for result-bearing
-queries. In the browser's Application inspection, confirm Local Storage, Session
-Storage, IndexedDB, Cache Storage, and OPFS contain no result data and that no service
-worker is registered. Inspecting the Network stream is allowed but is not MCP-boundary
-evidence.
+output. Confirm accepted submissions return the exact governed SQL while rejected
+submissions return `null`. Confirm that the Snowflake connector logger remains disabled
+because it is not safe for result-bearing queries. In the browser's Application
+inspection, confirm Local Storage, Session Storage, IndexedDB, Cache Storage, and OPFS
+contain no result data and that no service worker is registered. Inspecting the Network
+stream is allowed but is not MCP-boundary evidence.
 
 For the administrator-aborted-query case, submit the approved long-running bounded
 view and have the administrator terminate that query from Snowflake while it is

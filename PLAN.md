@@ -2,14 +2,15 @@
 
 **Status:** Ready for connected MVP validation
 **Last updated:** August 21, 2026
-**Current decision:** [ADR 0020](docs/decisions/0020-print-governed-sql-for-the-operator.md)
+**Current decision:** [ADR 0021](docs/decisions/0021-return-governed-sql-in-submission-receipts.md)
 
 ## Product
 
 Snowglobe is a local application for one analyst:
 
 1. an agent submits one Snowflake read query through MCP;
-2. MCP returns an opaque request ID and coarse lifecycle states only;
+2. MCP returns the exact governed SQL with an opaque request ID, then coarse lifecycle
+   states;
 3. Snowglobe executes the query with a fixed read-only profile; and
 4. the analyst opens the result in a browser data viewer.
 
@@ -22,13 +23,15 @@ Model-facing MCP, CLI, and Pi output may contain only:
 
 - submission `status`: `accepted` or `rejected`;
 - an opaque `request_id`;
-- a fixed submission `reason_code`; and
+- a fixed submission `reason_code`;
+- exact `governed_sql` for accepted submissions, or `null` for rejected submissions;
+  and
 - lifecycle `status`: `pending`, `complete`, `failed`, `cancelled`, `expired`,
   `not_found`, or `service_unavailable`.
 
-They must not contain rows, values, schema, names, counts, sizes, timing, SQL, database
-errors, Snowflake identifiers, result locations, or result-derived artifacts. Text and
-structured MCP content must be equivalent and schema-closed.
+They must not contain rows, values, result schema or column names, counts, sizes, timing,
+database errors, Snowflake identifiers, result locations, or result-derived artifacts.
+Text and structured MCP content must be equivalent and schema-closed.
 
 Result bytes travel through separate loopback viewer routes into the browser worker.
 Enabling Snowglobe's MCP does not grant access to those routes. Browser, screenshot,
@@ -56,6 +59,8 @@ and outside the MCP contract.
   persisted.
 - Local configuration and startup commands may report actionable operator diagnostics;
   model-facing MCP, CLI, and Pi failures remain closed receipts.
+- Accepted submission receipts expose the exact governed SQL without retaining it in
+  broker metadata; rejected receipts expose `null`.
 - Immediately before a connector execution attempt, the foreground local runtime prints
   the opaque request ID and exact governed SQL for analyst troubleshooting. Snowglobe
   does not retain that diagnostic.

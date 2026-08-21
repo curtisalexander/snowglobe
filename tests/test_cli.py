@@ -6,7 +6,7 @@ from pytest import CaptureFixture, MonkeyPatch
 from snowglobe import cli
 
 
-def test_submit_reads_sql_from_stdin_and_prints_only_closed_receipt(
+def test_submit_reads_sql_from_stdin_and_prints_the_governed_sql_receipt(
     monkeypatch: MonkeyPatch,
     capsys: CaptureFixture[str],
 ) -> None:
@@ -19,7 +19,12 @@ def test_submit_reads_sql_from_stdin_and_prints_only_closed_receipt(
             "sql": sql_canary,
             "requested_ttl": 300,
         }
-        return {"status": "accepted", "request_id": request_id, "reason_code": "NONE"}
+        return {
+            "status": "accepted",
+            "request_id": request_id,
+            "reason_code": "NONE",
+            "governed_sql": "SELECT PRIVATE_SQL_CANARY LIMIT 51",
+        }
 
     monkeypatch.setattr(cli, "_invoke", invoke)
     monkeypatch.setattr(cli.sys, "stdin", StringIO(sql_canary))
@@ -30,9 +35,10 @@ def test_submit_reads_sql_from_stdin_and_prints_only_closed_receipt(
         "status": "accepted",
         "request_id": request_id,
         "reason_code": "NONE",
+        "governed_sql": "SELECT PRIVATE_SQL_CANARY LIMIT 51",
     }
     assert captured.err == ""
-    assert sql_canary not in captured.out
+    assert sql_canary in captured.out
 
 
 def test_status_prints_only_closed_receipt(
@@ -117,6 +123,7 @@ def test_malformed_response_with_result_data_fails_closed(
             "status": "accepted",
             "request_id": "abcdefghijklmnopqrstuvwx",
             "reason_code": "NONE",
+            "governed_sql": "SELECT 1 LIMIT 51",
             "result": result_canary,
         }
 

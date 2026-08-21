@@ -3,6 +3,7 @@
 import asyncio
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 from snowglobe.arrow_stream import ArrowBatchSource
@@ -10,7 +11,13 @@ from snowglobe.broker import CancellableCursor, InProcessBroker, RequestUnavaila
 
 ExecutionStarted = Callable[[CancellableCursor | None], Callable[[], None]]
 AdmittedWork = Callable[[str, ExecutionStarted], Awaitable[ArrowBatchSource]]
-QueryAdmission = Callable[[str], AdmittedWork]
+QueryAdmission = Callable[[str], tuple[str, AdmittedWork]]
+
+
+@dataclass(frozen=True, slots=True)
+class SubmittedQuery:
+    request: RequestView
+    governed_sql: str
 
 
 class BackgroundQueryExecutor:
@@ -27,12 +34,12 @@ class BackgroundQueryExecutor:
         *,
         sql: str,
         requested_ttl: timedelta,
-    ) -> RequestView:
+    ) -> SubmittedQuery:
         """Return after admission, pending registration, and task scheduling succeed."""
 
         if self._closed:
             raise RequestUnavailable
-        work = self._admit(sql)
+        governed_sql, work = self._admit(sql)
         request = self._broker.submit(requested_ttl=requested_ttl)
         loop = asyncio.get_running_loop()
         coroutine = self._run(request, work)
@@ -45,7 +52,7 @@ class BackgroundQueryExecutor:
             raise
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
-        return request
+        return SubmittedQuery(request=request, governed_sql=governed_sql)
 
     async def close(self) -> None:
         """Cancel pending work and wait for request-scoped cleanup during shutdown."""

@@ -48,7 +48,7 @@ may be retained when useful; they do not prove what entered model context.
 - Result canaries absent from CLI output: PASS / FAIL
 - Pi registers exactly two closed tools with one receipt in tool content: PASS / FAIL
 - Result canaries absent from Pi tool content and details: PASS / FAIL
-- Submitted SQL absent from MCP, CLI, and Pi responses: PASS / FAIL
+- Accepted receipts contain exact governed SQL; rejected receipts contain `null`: PASS / FAIL
 - Snowflake connector logger remains suppressed: PASS / FAIL
 - Result data absent from browser storage and service workers: PASS / FAIL
 - Complete canary result visible through the local viewer path: PASS / FAIL

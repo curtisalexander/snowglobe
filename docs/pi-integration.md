@@ -9,7 +9,7 @@ extension that registers model-callable tools. Snowglobe therefore ships as a
 [Pi extension](https://pi.dev/docs/latest/extensions) that registers
 `submit_read_query` and `get_query_status`. The extension provides strict
 input schemas, sends SQL through stdin, validates the CLI's JSON independently, and
-returns only the closed Snowglobe receipts.
+returns only the closed Snowglobe receipts, including exact governed SQL on acceptance.
 
 ## Architecture
 
@@ -131,7 +131,7 @@ Pi should call only:
 Submission tool content is exactly:
 
 ```json
-{"status":"accepted","request_id":"opaque-random-request-id","reason_code":"NONE"}
+{"status":"accepted","request_id":"opaque-random-request-id","reason_code":"NONE","governed_sql":"SELECT * FROM YOUR_TEST_DATABASE.YOUR_TEST_SCHEMA.YOUR_APPROVED_VIEW LIMIT 51"}
 ```
 
 Status tool content is exactly:
@@ -151,7 +151,8 @@ The extension:
 - reads no project or user Snowflake configuration;
 - sends SQL to the CLI only through stdin;
 - captures at most 4 KiB of stdout and never returns stderr;
-- validates exact receipt keys, values, ID format, and accepted/rejected consistency;
+- validates exact receipt keys, values, ID format, governed SQL presence, and
+  accepted/rejected consistency;
 - converts process launch, timeout, cancellation, nonzero exit, oversized output,
   malformed JSON, or an additional result-derived field to `SERVICE_UNAVAILABLE`; and
 - exposes no result, viewer, cancellation, configuration, or credential tool.

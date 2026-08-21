@@ -34,6 +34,7 @@ test("does not pass malformed CLI result data into Pi context", async () => {
       status: "accepted",
       request_id: requestId,
       reason_code: "NONE",
+      governed_sql: "SELECT SQL_CANARY LIMIT 51",
       rows: ["RESULT_VALUE_CANARY"],
     }),
   );
@@ -65,6 +66,7 @@ test("contains rejected runner errors for both model-facing tools", async () => 
     status: "rejected",
     request_id: JSON.parse(submission.content[0].text).request_id,
     reason_code: "SERVICE_UNAVAILABLE",
+    governed_sql: null,
   });
   assert.deepEqual(JSON.parse(status.content[0].text), {
     request_id: requestId,
@@ -76,7 +78,12 @@ test("contains rejected runner errors for both model-facing tools", async () => 
 });
 
 test("passes an exact submission receipt with empty details", async () => {
-  const receipt = { status: "accepted", request_id: requestId, reason_code: "NONE" };
+  const receipt = {
+    status: "accepted",
+    request_id: requestId,
+    reason_code: "NONE",
+    governed_sql: "SELECT 1 LIMIT 51",
+  };
   const tools = registeredTools(JSON.stringify(receipt));
 
   const result = await tools[0].execute(
@@ -132,7 +139,12 @@ test("invokes the locked package CLI with SQL only on stdin", async () => {
   const pi = { registerTool: (tool: (typeof tools)[number]) => tools.push(tool) };
   const runner = async (command: string, args: string[], stdin: string) => {
     calls.push({ command, args, stdin });
-    return JSON.stringify({ status: "accepted", request_id: requestId, reason_code: "NONE" });
+    return JSON.stringify({
+      status: "accepted",
+      request_id: requestId,
+      reason_code: "NONE",
+      governed_sql: "SELECT SQL_STDIN_CANARY LIMIT 51",
+    });
   };
   registerSnowglobe(pi as unknown as ExtensionAPI, runner);
 

@@ -54,6 +54,7 @@ def test_advertises_only_the_two_exact_tool_contracts() -> None:
                 "status",
                 "request_id",
                 "reason_code",
+                "governed_sql",
             }
             assert set(status.output_schema["properties"]) == {"request_id", "status"}
             assert status.output_schema["properties"]["status"]["enum"] == [
@@ -83,9 +84,15 @@ def test_receipt_has_constant_shape_without_input_data() -> None:
             )
 
             assert result.structured_content is not None
-            assert set(result.structured_content) == {"status", "request_id", "reason_code"}
+            assert set(result.structured_content) == {
+                "status",
+                "request_id",
+                "reason_code",
+                "governed_sql",
+            }
             assert result.structured_content["status"] == "rejected"
             assert result.structured_content["reason_code"] == "SERVICE_UNAVAILABLE"
+            assert result.structured_content["governed_sql"] is None
             assert len(result.content) == 1
             assert isinstance(result.content[0], TextContent)
             assert json.loads(result.content[0].text) == result.structured_content
@@ -103,7 +110,12 @@ def test_unknown_tool_name_is_not_reflected() -> None:
             result = await client.call_tool(canary, {})
 
             assert result.structured_content is not None
-            assert set(result.structured_content) == {"status", "request_id", "reason_code"}
+            assert set(result.structured_content) == {
+                "status",
+                "request_id",
+                "reason_code",
+                "governed_sql",
+            }
             assert result.structured_content["status"] == "rejected"
             assert result.structured_content["reason_code"] == "INVALID_REQUEST"
             assert isinstance(result.content[0], TextContent)
@@ -167,7 +179,7 @@ def test_synthetic_submission_returns_accepted_after_pending_registration() -> N
             await release.wait()
             return source
 
-        return work
+        return f"SELECT '{canary}' LIMIT 51", work
 
     synthetic_server = create_server(
         ControlPlane(
@@ -191,10 +203,11 @@ def test_synthetic_submission_returns_accepted_after_pending_registration() -> N
                 "status": "accepted",
                 "request_id": request_id,
                 "reason_code": "NONE",
+                "governed_sql": f"SELECT '{canary}' LIMIT 51",
             }
             assert isinstance(accepted.content[0], TextContent)
             assert json.loads(accepted.content[0].text) == accepted.structured_content
-            assert canary not in accepted.model_dump_json()
+            assert accepted.structured_content["governed_sql"] == f"SELECT '{canary}' LIMIT 51"
 
             await started.wait()
             pending = await client.call_tool("get_query_status", {"request_id": request_id})
@@ -230,7 +243,7 @@ def test_background_execution_failure_exposes_only_failed() -> None:
             finished.set()
             raise RuntimeError(error_canary)
 
-        return work
+        return f"SELECT '{sql_canary}' LIMIT 51", work
 
     synthetic_server = create_server(
         ControlPlane(
@@ -250,6 +263,9 @@ def test_background_execution_failure_exposes_only_failed() -> None:
             )
             assert accepted.structured_content is not None
             request_id = accepted.structured_content["request_id"]
+            assert accepted.structured_content["governed_sql"] == (
+                f"SELECT '{sql_canary}' LIMIT 51"
+            )
 
             await finished.wait()
             while request_broker.get_request(request_id).status.value == "pending":
@@ -261,8 +277,8 @@ def test_background_execution_failure_exposes_only_failed() -> None:
                 "status": "failed",
             }
             model_visible = accepted.model_dump_json() + failed.model_dump_json()
-            for canary in (sql_canary, error_canary):
-                assert canary not in model_visible
+            assert sql_canary in model_visible
+            assert error_canary not in model_visible
 
     asyncio.run(exercise())
 

@@ -4,6 +4,7 @@
 
 - [Implementation plan](../PLAN.md) — current single-analyst scope, milestones, and progress.
 - [Architecture decisions](decisions/README.md) — accepted technical and security decisions; these take precedence when older source material differs.
+- [Governed SQL receipt decision](decisions/0021-return-governed-sql-in-submission-receipts.md) — why accepted submission receipts expose exact governed SQL.
 - [Local threat model](threat-model.md) — loopback trust boundary, data flows, limitations, and required evidence.
 - [Snowflake configuration](configuration.md) — current `connections.toml` contract.
 - [Governed SQL policy](sql-policy.md) — exact authorization boundary with accepted,

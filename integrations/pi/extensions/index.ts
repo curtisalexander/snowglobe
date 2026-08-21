@@ -22,7 +22,7 @@ export function registerSnowglobe(pi: ExtensionAPI, runner: typeof runProcess = 
     name: "submit_read_query",
     label: "Submit Snowglobe read query",
     description:
-      "Submit one governed Snowflake read query to the running local Snowglobe service. Returns only an opaque closed receipt; never returns query results.",
+      "Submit one governed Snowflake read query to the running local Snowglobe service. An accepted receipt includes the opaque request ID and exact governed SQL; never returns query results.",
     promptSnippet: "Submit governed Snowflake reads without exposing result data",
     promptGuidelines: ["Use submit_read_query for governed Snowflake reads."],
     parameters: Type.Object(

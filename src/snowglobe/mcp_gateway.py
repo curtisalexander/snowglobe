@@ -31,8 +31,9 @@ REQUEST_ID_PATTERN = "^[A-Za-z0-9_-]{20,32}$"
 SUBMIT_READ_QUERY = Tool(
     name=SUBMIT_TOOL_NAME,
     description=(
-        "Submit one governed Snowflake read query. Returns only an opaque receipt; "
-        "query results are never returned through MCP."
+        "Submit one governed Snowflake read query. An accepted receipt includes the "
+        "opaque request ID and exact governed SQL; query results are never returned "
+        "through MCP."
     ),
     input_schema={
         "type": "object",
@@ -57,8 +58,9 @@ SUBMIT_READ_QUERY = Tool(
                     "SERVICE_UNAVAILABLE",
                 ],
             },
+            "governed_sql": {"type": ["string", "null"], "minLength": 1},
         },
-        "required": ["status", "request_id", "reason_code"],
+        "required": ["status", "request_id", "reason_code", "governed_sql"],
         "additionalProperties": False,
     },
 )

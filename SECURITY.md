@@ -3,10 +3,11 @@
 Snowglobe has one security boundary: query results do not travel through its
 model-facing MCP, CLI, or Pi responses.
 
-Those responses may contain only an opaque request ID, fixed submission status and
-reason, and coarse lifecycle state. They must not contain rows, values, schema, names,
-counts, sizes, timing, SQL, database errors, Snowflake identifiers, result locations,
-or result-derived artifacts.
+Submission responses may contain an opaque request ID, fixed status and reason, and the
+exact governed SQL for accepted work (`null` when rejected). Lifecycle responses may
+contain only the request ID and coarse state. Neither may contain rows, values, result
+schema or column names, counts, sizes, timing, database errors, Snowflake identifiers,
+result locations, or result-derived artifacts.
 
 Result bytes travel through separate loopback viewer routes into a browser worker.
 Enabling Snowglobe's MCP does not enable those routes or return their data. Browser,
@@ -30,15 +31,16 @@ diagnostics into an agent conversation. Snowglobe suppresses the Snowflake conne
 own logger because its debug and exceptional paths can contain result payloads or result
 locations.
 
-The foreground local runtime prints the exact governed SQL immediately before each
-connector execution attempt, correlated by opaque request ID. This operator-only
-diagnostic is not retained by Snowglobe or returned through MCP, CLI, or Pi, but a
-terminal or service manager may capture it. Treat that output as sensitive because SQL
-may contain literals.
+Accepted MCP, CLI, and Pi submission receipts return the exact governed SQL because the
+model authored the query and the harness needs to correlate the statement with its
+request ID. Snowglobe does not retain SQL in broker metadata. The foreground local
+runtime also prints the statement immediately before each connector execution attempt;
+a terminal or service manager may capture it. Treat both interfaces as sensitive
+because SQL may contain literals.
 
 Until connected validation is complete, use only a dedicated non-production Snowflake
 identity and non-sensitive test data. Do not include credentials or query results in
 issues or transcripts.
 
 See [PLAN.md](PLAN.md) and
-[ADR 0020](docs/decisions/0020-print-governed-sql-for-the-operator.md).
+[ADR 0021](docs/decisions/0021-return-governed-sql-in-submission-receipts.md).

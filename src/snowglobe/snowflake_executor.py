@@ -70,7 +70,7 @@ class SnowflakeQueryAdmission:
                 mark_started,
             )
 
-        return work
+        return governed_sql, work
 
     def _execute(
         self,

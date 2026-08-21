@@ -21,7 +21,7 @@ class ControlBroker(Protocol):
 
 
 class ControlPlane:
-    """Submit governed work and expose only closed lifecycle receipts."""
+    """Submit governed work and expose only closed submission and lifecycle receipts."""
 
     def __init__(
         self,
@@ -41,7 +41,7 @@ class ControlPlane:
         if self._executor is None:
             return rejected_receipt(ReasonCode.SERVICE_UNAVAILABLE)
         try:
-            request = await self._executor.submit(
+            submission = await self._executor.submit(
                 sql=sql,
                 requested_ttl=requested_ttl,
             )
@@ -51,8 +51,9 @@ class ControlPlane:
             return rejected_receipt(ReasonCode.SERVICE_UNAVAILABLE)
         return QueryReceipt(
             status=ReceiptStatus.ACCEPTED,
-            request_id=request.request_id,
+            request_id=submission.request.request_id,
             reason_code=ReasonCode.NONE,
+            governed_sql=submission.governed_sql,
         )
 
     def status(self, request_id: str) -> QueryStatusReceipt:
@@ -83,6 +84,7 @@ def rejected_receipt(reason_code: ReasonCode) -> QueryReceipt:
         status=ReceiptStatus.REJECTED,
         request_id=secrets.token_urlsafe(18),
         reason_code=reason_code,
+        governed_sql=None,
     )
 
 

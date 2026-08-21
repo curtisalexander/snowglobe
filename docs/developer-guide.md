@@ -13,11 +13,11 @@ architecture proposal. Use it alongside:
 
 Snowglobe lets an agent submit one tightly governed Snowflake read query while keeping
 result-derived data out of model-facing control channels. A transport-neutral control
-plane returns an opaque request ID and coarse lifecycle states through either MCP or a
-result-free CLI client. Pi uses native typed tools that wrap that CLI and independently
-validate its receipts. The local viewer is the data plane: it streams a complete
-admitted Arrow result into an in-memory DuckDB-Wasm instance in a dedicated browser
-worker.
+plane returns exact governed SQL with an opaque request ID, followed by coarse lifecycle
+states, through either MCP or a result-free CLI client. Pi uses native typed tools that
+wrap that CLI and independently validate its receipts. The local viewer is the data
+plane: it streams a complete admitted Arrow result into an in-memory DuckDB-Wasm
+instance in a dedicated browser worker.
 
 ```text
                        MCP or CLI control
@@ -71,6 +71,8 @@ boundary. The implementation assumes all of the following:
 - MCP advertises exactly `submit_read_query` and `get_query_status`.
 - MCP never returns rows, schema, column names, counts, sizes, timings, Snowflake IDs,
   driver errors, result locations, or result artifacts.
+- Accepted submission receipts return exact governed SQL; rejected receipts return
+  `governed_sql: null`.
 - MCP text content and structured content encode the same closed receipt.
 - CLI stdout contains exactly the same closed receipt models and never result data.
 - Pi registers exactly those two tools, independently validates CLI receipts, and
@@ -285,7 +287,8 @@ An accepted result is exactly:
 {
   "status": "accepted",
   "request_id": "opaque-random-request-id",
-  "reason_code": "NONE"
+  "reason_code": "NONE",
+  "governed_sql": "SELECT * FROM APPROVED_DB.APPROVED_SCHEMA.APPROVED_VIEW LIMIT 51"
 }
 ```
 
@@ -342,9 +345,10 @@ generate, parse, and authorize the exact SQL that will execute
 
 The 51-row cap is `K + 1` for a 50-row result budget. It lets Arrow admission detect
 an oversized result instead of silently presenting a truncated result as complete.
-The configured executor prints this final governed SQL, correlated with its opaque
-request ID, to the foreground local runtime immediately before the connector call. It
-does not add SQL to broker views or any model-facing receipt.
+The accepted submission receipt returns this final governed SQL, correlated with its
+opaque request ID. The configured executor also prints the same pair to the foreground
+local runtime immediately before the connector call. It does not add SQL to broker
+views or lifecycle receipts.
 
 For example, this approved input:
 
@@ -599,10 +603,10 @@ model-facing adapters.
 Do not log result batches, values, or result locations. `request_cursor()` suppresses
 the Snowflake connector logger because its debug and exceptional paths can include SQL,
 signed URLs, response structures, or Arrow payloads. This targeted suppression does not
-require unrelated local startup errors to be detail-free. Snowglobe's own single
-operator diagnostic deliberately prints only the exact governed SQL and opaque request
-ID; operators must treat terminal captures as sensitive because SQL may contain
-literals.
+require unrelated local startup errors to be detail-free. Snowglobe's own diagnostic
+deliberately prints only the exact governed SQL and opaque request ID; accepted
+submission receipts return the same pair. Operators must treat terminal and
+model-harness captures as sensitive because SQL may contain literals.
 
 ## 15. Tests as architecture evidence
 
@@ -619,7 +623,7 @@ The tests are organized around boundaries rather than only functions:
 | Connector ordering, empty schema, overflow, cancellation, no-connect rejection | [`test_snowflake_executor.py`](../tests/test_snowflake_executor.py) |
 | Incremental schema/cell/row/byte admission | [`test_arrow_stream.py`](../tests/test_arrow_stream.py) |
 | Viewer routes, headers, frames, incomplete stream, cancellation mid-stream | [`test_result_api.py`](../tests/test_result_api.py) |
-| Canary presence in the viewer path and absence from MCP | [`test_boundary_canaries.py`](../tests/test_boundary_canaries.py) |
+| Result-canary presence in the viewer path and absence from MCP | [`test_boundary_canaries.py`](../tests/test_boundary_canaries.py) |
 | Browser framing and terminal publication | [`result-stream.test.ts`](../apps/viewer/src/result-stream.test.ts) |
 | Incremental Arrow ingestion | [`arrow-ingest.test.ts`](../apps/viewer/src/arrow-ingest.test.ts) |
 | Worker destruction and one-result lifecycle | [`worker.test.ts`](../apps/viewer/src/worker.test.ts) |
