@@ -7,6 +7,7 @@ import duckdbMvpWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.
 import duckdbMvpWasm from "@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url";
 import { createIncrementalArrowSink } from "./arrow-ingest";
 import { maximumResultBytes, maximumViewportRows } from "./mvp-limits";
+import { openResultStream } from "./result-api";
 import { ProvisionalResult } from "./result-stream";
 import { createViewport } from "./viewport";
 
@@ -23,20 +24,17 @@ const bundles: duckdb.DuckDBBundles = {
 
 let database: duckdb.AsyncDuckDB | undefined;
 let connection: duckdb.AsyncDuckDBConnection | undefined;
-let provisionalResult: ProvisionalResult | undefined;
+let activeLoad: AbortController | undefined;
 let shutdownRequested = false;
 const pendingTable = "_snowglobe_pending";
 const publishedTable = "snowglobe_result";
 
 type WorkerRequest =
   | { type: "initialize" | "destroy" | "abort"; sequence?: number }
-  | { type: "stream-start"; maximumResultBytes: number; sequence: number }
-  | { type: "stream-chunk"; chunk: Uint8Array; sequence: number }
-  | { type: "stream-end"; sequence: number }
+  | { type: "load"; requestId: string; sequence: number }
   | { type: "viewport"; offset: number; limit: number; sequence: number };
 
 async function destroyDatabase(): Promise<void> {
-  provisionalResult = undefined;
   if (connection) {
     await connection.close().catch(() => undefined);
     connection = undefined;
@@ -47,13 +45,10 @@ async function destroyDatabase(): Promise<void> {
   }
 }
 
-function acknowledge(sequence: number | undefined): void {
-  if (sequence !== undefined) self.postMessage({ type: "ack", sequence });
-}
-
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   if (event.data.type === "destroy" || event.data.type === "abort") {
     shutdownRequested = true;
+    activeLoad?.abort();
     await destroyDatabase();
     self.postMessage({ type: "destroyed" });
     self.close();
@@ -89,19 +84,15 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     if (!database || !connection) throw new Error("not initialized");
     const activeConnection = connection;
 
-    if (event.data.type === "stream-start") {
-      if (
-        provisionalResult ||
-        event.data.maximumResultBytes !== maximumResultBytes
-      ) {
-        throw new Error("invalid stream start");
-      }
-      provisionalResult = new ProvisionalResult(
-        event.data.maximumResultBytes,
+    if (event.data.type === "load") {
+      const controller = new AbortController();
+      activeLoad = controller;
+      const stream = await openResultStream(event.data.requestId, controller.signal);
+      const loadingResult = new ProvisionalResult(
+        maximumResultBytes,
         createIncrementalArrowSink(
           activeConnection,
           pendingTable,
-          event.data.maximumResultBytes,
           async () => {
             await activeConnection.query(
               `ALTER TABLE "${pendingTable}" RENAME TO "${publishedTable}"`,
@@ -109,17 +100,23 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
           },
         ),
       );
-    } else if (event.data.type === "stream-chunk") {
-      if (!provisionalResult) throw new Error("stream not started");
-      await provisionalResult.push(event.data.chunk);
-    } else if (event.data.type === "stream-end") {
-      if (!provisionalResult) throw new Error("stream not started");
-      await provisionalResult.finish();
-      provisionalResult = undefined;
-      self.postMessage({ type: "published" });
+      const reader = stream.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          await loadingResult.push(value);
+        }
+        await loadingResult.finish();
+      } catch (error) {
+        await reader.cancel().catch(() => undefined);
+        throw error;
+      } finally {
+        reader.releaseLock();
+        if (activeLoad === controller) activeLoad = undefined;
+      }
     } else if (event.data.type === "viewport") {
       if (
-        provisionalResult ||
         !Number.isSafeInteger(event.data.offset) ||
         event.data.offset < 0 ||
         !Number.isSafeInteger(event.data.limit) ||
@@ -140,7 +137,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     } else {
       throw new Error("unknown message");
     }
-    acknowledge(event.data.sequence);
+    self.postMessage({ type: "ack", sequence: event.data.sequence });
   } catch {
     await destroyDatabase();
     if (shutdownRequested) return;

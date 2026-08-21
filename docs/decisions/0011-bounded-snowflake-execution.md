@@ -1,6 +1,6 @@
 # ADR 0011: Bounded asynchronous Snowflake execution
 
-- **Status:** Accepted
+- **Status:** Superseded in part by [ADR 0017](0017-minimal-model-context-boundary.md)
 - **Date:** August 19, 2026
 - **Builds on:** [ADR 0009](0009-constrained-snowflake-mvp-budgets.md) and
   [ADR 0010](0010-minimum-snowflake-select-policy.md)

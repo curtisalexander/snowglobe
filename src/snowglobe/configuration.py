@@ -31,7 +31,7 @@ CONNECTION_FIELDS = frozenset(
 
 
 class ConfigurationError(Exception):
-    """A deliberately detail-free configuration failure."""
+    """A local Snowglobe configuration failure."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,10 +80,10 @@ def load_snowflake_profile(path: Path, profile_name: str) -> SnowflakeProfile:
         document = tomllib.loads(path.read_text(encoding="utf-8"))
         profile = document[profile_name]
         if not isinstance(profile, dict):
-            raise ConfigurationError
+            raise ConfigurationError("Snowflake profile must be a TOML table")
         values = {field: _required_string(profile[field]) for field in CONNECTION_FIELDS}
         if values["authenticator"] != "SNOWFLAKE_JWT":
-            raise ConfigurationError
+            raise ConfigurationError("Snowflake profile must use SNOWFLAKE_JWT")
     except (
         KeyError,
         OSError,
@@ -92,7 +92,9 @@ def load_snowflake_profile(path: Path, profile_name: str) -> SnowflakeProfile:
         TypeError,
         ValueError,
     ) as error:
-        raise ConfigurationError from error
+        raise ConfigurationError(
+            f"could not load Snowflake profile {profile_name!r} from {path}: {error}"
+        ) from error
 
     return SnowflakeProfile(
         account=values["account"],
@@ -112,13 +114,13 @@ def load_snowglobe_profile(path: Path, profile_name: str) -> SnowglobeProfile:
         document = tomllib.loads(path.read_text(encoding="utf-8"))
         _require_exact_fields(document, SNOWGLOBE_ROOT_FIELDS)
         if document["schema_version"] != SCHEMA_VERSION:
-            raise ConfigurationError
+            raise ConfigurationError(f"snowglobe.toml requires schema_version {SCHEMA_VERSION}")
         profiles = document["profiles"]
         if not isinstance(profiles, dict):
-            raise ConfigurationError
+            raise ConfigurationError("snowglobe.toml profiles must be a TOML table")
         profile = profiles[profile_name]
         if not isinstance(profile, dict):
-            raise ConfigurationError
+            raise ConfigurationError("Snowglobe profile must be a TOML table")
         _require_exact_fields(profile, SNOWGLOBE_PROFILE_FIELDS)
         allowed_views = _required_string_list(profile["allowed_views"])
     except (
@@ -129,26 +131,28 @@ def load_snowglobe_profile(path: Path, profile_name: str) -> SnowglobeProfile:
         TypeError,
         ValueError,
     ) as error:
-        raise ConfigurationError from error
+        raise ConfigurationError(
+            f"could not load Snowglobe profile {profile_name!r} from {path}: {error}"
+        ) from error
 
     return SnowglobeProfile(allowed_views=allowed_views)
 
 
 def _require_exact_fields(value: dict[str, Any], expected: frozenset[str]) -> None:
     if set(value) != expected:
-        raise ConfigurationError
+        raise ConfigurationError("Snowglobe configuration fields do not match the schema")
 
 
 def _required_string(value: object) -> str:
     if not isinstance(value, str) or not value.strip():
-        raise ConfigurationError
+        raise ConfigurationError("configuration values must be non-empty strings")
     return value
 
 
 def _required_string_list(value: object) -> tuple[str, ...]:
     if not isinstance(value, list) or not value:
-        raise ConfigurationError
+        raise ConfigurationError("allowed_views must be a non-empty list")
     values = tuple(_required_string(item) for item in value)
     if len(set(values)) != len(values):
-        raise ConfigurationError
+        raise ConfigurationError("allowed_views must not contain duplicates")
     return values

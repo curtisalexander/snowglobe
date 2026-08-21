@@ -42,13 +42,19 @@ class SnowflakeSqlPolicy:
         """Return policy-generated Snowflake SQL or reject without detail."""
 
         try:
-            statements = sqlglot.parse(sql, read="snowflake", error_level=ErrorLevel.RAISE)
-            if len(statements) != 1 or not isinstance(statements[0], exp.Query):
-                raise QueryPolicyRejected
-            statement = statements[0]
+            statement = _parse_query(sql)
             self._validate(statement)
             _apply_row_cap(statement, self.maximum_rows + 1)
-            return statement.sql(dialect="snowflake")
+            governed_sql = statement.sql(dialect="snowflake")
+
+            # Re-authorize the exact SQLGlot output that will execute. Some query-shaped
+            # input, such as SELECT INTO, generates a mutating statement.
+            generated_statement = _parse_query(governed_sql)
+            self._validate(generated_statement)
+            _apply_row_cap(generated_statement, self.maximum_rows + 1)
+            if generated_statement.sql(dialect="snowflake") != governed_sql:
+                raise QueryPolicyRejected
+            return governed_sql
         except Exception:
             raise QueryPolicyRejected from None
 
@@ -62,11 +68,25 @@ class SnowflakeSqlPolicy:
             for relation, source in scope.selected_sources.values():
                 if isinstance(source, exp.Table):
                     self._validate_table(source)
-                elif isinstance(relation, (exp.Query, exp.Table, exp.Values)):
+                elif (
+                    isinstance(relation, (exp.Query, exp.Table, exp.Values))
+                    or (
+                        isinstance(relation, exp.TableFromRows)
+                        and (
+                            isinstance(relation.this, exp.Explode)
+                            or (
+                                isinstance(relation.this, exp.Generator)
+                                and relation.this.find(exp.Query) is None
+                            )
+                        )
+                    )
+                    or (
+                        isinstance(relation, exp.Lateral) and isinstance(relation.this, exp.Explode)
+                    )
+                ):
                     continue
                 else:
-                    # Table-producing functions are relation sources rather than
-                    # ordinary expressions and can read data without a Table node.
+                    # Unknown row sources may read outside the configured views.
                     raise QueryPolicyRejected
 
     def _validate_table(self, table: exp.Table) -> None:
@@ -85,6 +105,13 @@ class SnowflakeSqlPolicy:
         )
         if view not in self.allowed_views:
             raise QueryPolicyRejected
+
+
+def _parse_query(sql: str) -> exp.Query:
+    statements = sqlglot.parse(sql, read="snowflake", error_level=ErrorLevel.RAISE)
+    if len(statements) != 1 or not isinstance(statements[0], exp.Query):
+        raise QueryPolicyRejected
+    return statements[0]
 
 
 def _configured_view(name: str) -> tuple[str, str, str]:

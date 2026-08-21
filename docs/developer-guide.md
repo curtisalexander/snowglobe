@@ -90,7 +90,8 @@ The accepted decisions behind these rules are primarily
 [ADR 0008](decisions/0008-single-analyst-loopback-runtime.md),
 [ADR 0009](decisions/0009-constrained-snowflake-mvp-budgets.md),
 [ADR 0010](decisions/0010-minimum-snowflake-select-policy.md), and
-[ADR 0011](decisions/0011-bounded-snowflake-execution.md).
+[ADR 0011](decisions/0011-bounded-snowflake-execution.md), as refined by
+[ADR 0019](decisions/0019-relation-centric-sql-authorization.md).
 
 ## 3. Repository map
 
@@ -162,7 +163,7 @@ prompt, and shutdown procedure in the
 | [`arrow_stream.py`](../src/snowglobe/arrow_stream.py) | Arrow schema/cell/row/byte admission and incremental IPC serialization |
 | [`result_api.py`](../src/snowglobe/result_api.py) | Viewer metadata and failure-atomic framed streaming routes |
 | [`mvp_limits.py`](../src/snowglobe/mvp_limits.py) | Shared backend MVP budgets |
-| [`preflight.py`](../src/snowglobe/preflight.py) | Value-free local and connected profile checks |
+| [`preflight.py`](../src/snowglobe/preflight.py) | Local and connected profile checks with operator diagnostics |
 
 ### Pi package ownership
 
@@ -255,8 +256,8 @@ accepts arbitrary connector options.
 
 Preflight uses the same loading, key conversion, policy construction, and connector
 argument path as runtime startup. Without `--connect`, it never calls Snowflake. With
-`--connect`, it opens and closes one cursor without executing SQL. Both success and
-failure output are fixed, value-free strings.
+`--connect`, it opens and closes one cursor without executing SQL. Success is a fixed
+message; failures include local configuration or connection detail for the operator.
 
 ## 6. Control-plane adapters and contracts
 
@@ -317,7 +318,8 @@ See [ADR 0014](decisions/0014-pi-extension-package.md) and the
 ## 7. SQL authorization and rewriting
 
 [`SnowflakeSqlPolicy.authorize()`](../src/snowglobe/sql_policy.py) applies the small
-application query policy:
+application query policy. The normative contract and broader example corpus are in the
+[governed SQL policy](sql-policy.md):
 
 ```text
 submitted SQL
@@ -333,6 +335,9 @@ require one read-query root
     │
     ▼
 apply top-level LIMIT 51 unless a smaller literal limit exists
+    │
+    ▼
+generate, parse, and authorize the exact SQL that will execute
 ```
 
 The 51-row cap is `K + 1` for a 50-row result budget. It lets Arrow admission detect
@@ -348,10 +353,16 @@ ORDER BY account_id
 
 is regenerated with a server-owned top-level `LIMIT 51`. A model-supplied larger
 literal limit is replaced; a smaller one is preserved. Ordinary scalar expressions,
-functions, and set operations are accepted. Table-producing functions are rejected
-because they are relation sources that can read data without a normal table node. DDL,
-DML, multiple statements, and unapproved or partially qualified external relations are
-also rejected. The configured read-only Snowflake role remains the mutation boundary.
+functions, and set operations are accepted. Structurally local `GENERATOR` and
+`FLATTEN` row sources are accepted. Other table functions, `RESULT_SCAN`, stage
+directory sources, and unknown relation shapes are rejected because they can read data
+without an approved table node. DDL, DML, multiple statements, and unapproved or
+partially qualified external relations are also rejected. The configured read-only
+Snowflake role remains the mutation boundary.
+
+This is intentionally a relation-centric policy: unknown data-source shapes fail
+closed, while ordinary expressions do not require inclusion in a recursive AST-node
+allowlist. See [ADR 0019](decisions/0019-relation-centric-sql-authorization.md).
 
 ## 8. Submission, execution, and acceptance ordering
 
@@ -463,9 +474,9 @@ These are viewer routes, not MCP contracts. They may include `expires_at`, and t
 stream contains result bytes. They are loopback-only but unauthenticated under the
 single-analyst threat model.
 
-Every route sets `no-store` and `nosniff`. Streaming fails closed unless
-the app factory was given explicit admission limits and the request is currently
-complete with a source.
+Every route sets `Cache-Control: no-store`. The app factory requires explicit admission
+limits, and streaming is available only when the request is currently complete with a
+source.
 
 The custom stream format is deliberately small:
 
@@ -489,24 +500,24 @@ become stream payloads.
 
 ## 12. Browser ingestion and publication
 
-The browser data path is intentionally split between Svelte's main thread and a
-dedicated application worker:
+The browser keeps result transport, parsing, and DuckDB inside a dedicated application
+worker. The main thread handles lifecycle metadata and a bounded viewport:
 
 ```text
 App.svelte
 ├── refresh or look up request metadata
 ├── explicit “Open result” action
 ├── replace a failed or closed one-result worker
-├── fetch framed stream through result-api.ts
 └── worker.ts
-    ├── transfer each transport chunk to duckdb.worker.ts
-    ├── wait for an acknowledgement before reading the next chunk
+    ├── send only the selected request ID to duckdb.worker.ts
+    ├── correlate worker acknowledgements and viewport replies
     └── request one bounded viewport after publication
 
 duckdb.worker.ts
 ├── instantiate in-memory DuckDB-Wasm
+├── fetch the no-store framed result stream by request ID
 ├── ResultStreamParser validates framing and 256-KiB payload total
-├── ArrowChunkQueue provides ingestion backpressure
+├── TransformStream provides ingestion backpressure
 ├── Apache Arrow reader parses incremental IPC
 ├── insert batches into _snowglobe_pending
 ├── on valid completion + clean EOF:
@@ -521,21 +532,19 @@ missing completion. It also bounds buffered protocol bytes before copying an inc
 transport chunk.
 
 [`createIncrementalArrowSink()`](../apps/viewer/src/arrow-ingest.ts) connects the
-parser to Apache Arrow's async record-batch reader. Queue `push()` does not resolve
-until the consumer takes the chunk, which propagates backpressure through worker RPC
-to the HTTP reader.
+parser to Apache Arrow's async record-batch reader. The `TransformStream` writer
+propagates reader backpressure to the worker's HTTP reader.
 
 [`duckdb.worker.ts`](../apps/viewer/src/duckdb.worker.ts) uses a pending table so
 partially parsed data is never queryable through the viewport path. Any parser,
 ingestion, DuckDB, viewport, abort, or unexpected message failure closes the
 connection, terminates DuckDB, reports `failed`, and closes the worker.
 
-[`worker.ts`](../apps/viewer/src/worker.ts) permits one load per worker, validates reply
-types and viewport shape, and cancels an active stream reader during destruction. A
-second load attempt, stream error, browser worker error, or viewer unmount destroys
-that worker. `App.svelte` creates a fresh worker after a load failure or when the
-analyst closes a result, so another request can be opened. Result chunks are transferred
-rather than copied when posted to the worker.
+[`worker.ts`](../apps/viewer/src/worker.ts) permits one load per worker and correlates
+reply types and sequences. The application worker owns and aborts its active HTTP
+request during destruction. A second load attempt, stream error, browser worker error,
+or viewer unmount destroys that worker. `App.svelte` creates a fresh worker after a load
+failure or when the analyst closes a result, so another request can be opened.
 
 Finally, [`createViewport()`](../apps/viewer/src/viewport.ts) converts only bounded
 cells to strings, hex-encodes binary, uses ISO timestamps, preserves null, and enforces
@@ -568,9 +577,10 @@ boundary and adding evidence for the larger memory and rendering envelope.
 
 ## 14. Failure handling philosophy
 
-Snowglobe uses detail-free domain exceptions and sanitizes again at public boundaries.
-The goal is not to diagnose through MCP; connected diagnosis comes from private local
-inspection and independent Snowflake history under the constrained runbook.
+MCP, the result-free CLI, and Pi sanitize failures into their closed receipts. Local
+configuration, preflight, and startup commands instead preserve actionable diagnostics
+for the analyst. Query execution failures still become only a coarse lifecycle state at
+model-facing adapters.
 
 | Failure point | MCP-visible result | Viewer/result behavior |
 |---|---|---|
@@ -583,10 +593,10 @@ inspection and independent Snowflake history under the constrained runbook.
 | Unknown ID | `not_found` | Viewer returns fixed 404 body |
 | Browser parse/ingestion failure | No new MCP data | Entire DuckDB worker is destroyed |
 
-Ordinary logs must never compensate by printing SQL, profile values, result metadata,
-driver exceptions, or Snowflake identifiers. `request_cursor()` suppresses the
-Snowflake connector logger because its debug records may contain SQL and Snowflake
-identifiers.
+Do not log result batches, values, or result locations. `request_cursor()` suppresses
+the Snowflake connector logger because its debug and exceptional paths can include SQL,
+signed URLs, response structures, or Arrow payloads. This targeted suppression does not
+require unrelated local startup errors to be detail-free.
 
 ## 15. Tests as architecture evidence
 
@@ -603,7 +613,7 @@ The tests are organized around boundaries rather than only functions:
 | Connector ordering, empty schema, overflow, cancellation, no-connect rejection | [`test_snowflake_executor.py`](../tests/test_snowflake_executor.py) |
 | Incremental schema/cell/row/byte admission | [`test_arrow_stream.py`](../tests/test_arrow_stream.py) |
 | Viewer routes, headers, frames, incomplete stream, cancellation mid-stream | [`test_result_api.py`](../tests/test_result_api.py) |
-| Canary absence across MCP/log/error/URL channels | [`test_boundary_canaries.py`](../tests/test_boundary_canaries.py) |
+| Canary presence in the viewer path and absence from MCP | [`test_boundary_canaries.py`](../tests/test_boundary_canaries.py) |
 | Browser framing and terminal publication | [`result-stream.test.ts`](../apps/viewer/src/result-stream.test.ts) |
 | Incremental Arrow ingestion | [`arrow-ingest.test.ts`](../apps/viewer/src/arrow-ingest.test.ts) |
 | Worker destruction and one-result lifecycle | [`worker.test.ts`](../apps/viewer/src/worker.test.ts) |
@@ -636,7 +646,7 @@ To rebuild context quickly, review in this order:
 2. [SECURITY.md](../SECURITY.md)
 3. [PLAN.md](../PLAN.md), especially the MVP target and deferred work
 4. [ADR 0008](decisions/0008-single-analyst-loopback-runtime.md) through
-   [ADR 0014](decisions/0014-pi-extension-package.md)
+   [ADR 0018](decisions/0018-minimal-boundary-cleanup.md)
 
 You should finish this pass able to state what MCP, CLI, and Pi tool output may
 disclose and why the viewer is not an authentication boundary.
@@ -696,7 +706,7 @@ Use this as a map, not a substitute for threat modeling:
 |---|---|---|
 | MCP fields, tools, status, or errors | contracts, gateway, PLAN model-visible contracts | MCP gateway + boundary canaries + real Streamable HTTP round trip |
 | Pi tools, process handling, or package API | CLI, Pi contracts, extension, ADR 0014 | Pi typecheck + Pi tests + package-load smoke test |
-| SQL grammar or SQLGlot version | policy, ADR 0017, allowed views, row-cap semantics | SQL policy tests |
+| SQL grammar or SQLGlot version | policy, ADR 0019, allowed views, generated-SQL pass, row-cap semantics | SQL policy tests |
 | Connector settings or lifecycle | configuration, Snowflake context manager, executor, ADRs 0009/0011 | configuration + Snowflake + executor tests |
 | Cancellation, expiry, concurrency | broker and generic executor | broker race tests + Snowflake cancellation tests |
 | Arrow types or limits | backend admission, stream replay, browser parser/ingestion, viewport | Arrow + Result API + all viewer tests |

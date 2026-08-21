@@ -17,7 +17,6 @@ def test_loads_rsa_key_as_pkcs8_der(tmp_path: Path, encoding: serialization.Enco
     )
     path = tmp_path / "key-material"
     path.write_bytes(source)
-    path.chmod(0o600)
 
     loaded = serialization.load_der_private_key(load_private_key(path), password=None)
 
@@ -26,7 +25,7 @@ def test_loads_rsa_key_as_pkcs8_der(tmp_path: Path, encoding: serialization.Enco
 
 
 @pytest.mark.parametrize("case", ["missing", "malformed", "encrypted", "non-rsa"])
-def test_rejects_key_failures_without_detail(tmp_path: Path, case: str) -> None:
+def test_rejects_key_failures_with_local_diagnostic(tmp_path: Path, case: str) -> None:
     path = tmp_path / "sensitive-key-name"
     if case == "malformed":
         path.write_bytes(b"not a key")
@@ -48,10 +47,7 @@ def test_rejects_key_failures_without_detail(tmp_path: Path, case: str) -> None:
                 serialization.NoEncryption(),
             )
         )
-    if path.exists():
-        path.chmod(0o600)
-
     with pytest.raises(PrivateKeyError) as caught:
         load_private_key(path)
 
-    assert str(caught.value) == ""
+    assert str(path) in str(caught.value)

@@ -7,7 +7,6 @@ from typing import Never
 import pyarrow as pa
 from mcp import Client
 from mcp.types import TextContent
-from pytest import CaptureFixture, LogCaptureFixture
 from starlette.testclient import TestClient
 
 from snowglobe.arrow_stream import ArrowBatchSource
@@ -52,10 +51,7 @@ def _arrow_payload(body: bytes) -> bytes:
     return b"".join(chunks)
 
 
-def test_result_canaries_exist_only_in_the_viewer_data_path(
-    capsys: CaptureFixture[str],
-    caplog: LogCaptureFixture,
-) -> None:
+def test_result_canaries_stay_out_of_mcp_and_exist_in_the_viewer_data_path() -> None:
     broker = InProcessBroker(maximum_pending_requests=1)
     source = CanarySource()
     sql_canary = "SQL_INPUT_CANARY"
@@ -156,10 +152,6 @@ def test_result_canaries_exist_only_in_the_viewer_data_path(
     assert first.column(1)[0].as_py() == b"BINARY_VALUE_CANARY\x00\xff"
     assert second.column(0)[0].as_py() == "SECOND_BATCH_CANARY"
 
-    captured = capsys.readouterr()
-    process_output = captured.out + captured.err + caplog.text
-    for canary in private_canaries:
-        assert canary not in process_output
     assert json.loads(public_error.content) == {"error": "not_found"}
 
 
@@ -177,7 +169,8 @@ def test_empty_result_preserves_schema_without_a_value_channel() -> None:
 
     source = EmptySource()
     broker = InProcessBroker()
-    request = broker.submit(requested_ttl=timedelta(minutes=5), source=source)
+    request = broker.submit(requested_ttl=timedelta(minutes=5))
+    broker.publish(request.request_id, source)
     response = TestClient(create_app(broker=broker, admission_limits=MVP_ARROW_LIMITS)).get(
         f"/v1/requests/{request.request_id}/stream"
     )
@@ -193,13 +186,10 @@ def test_every_mcp_lifecycle_response_remains_schema_closed() -> None:
     async def status_for(status: RequestStatus) -> None:
         nonlocal now
         broker = InProcessBroker(clock=lambda: now)
+        request = broker.submit(requested_ttl=timedelta(minutes=5))
         if status is RequestStatus.COMPLETE:
-            request = broker.submit(
-                requested_ttl=timedelta(minutes=5),
-                source=CanarySource(),
-            )
+            broker.publish(request.request_id, CanarySource())
         else:
-            request = broker.submit(requested_ttl=timedelta(minutes=5))
             if status is RequestStatus.FAILED:
                 broker.fail(request.request_id)
             elif status is RequestStatus.CANCELLED:

@@ -2,11 +2,10 @@
   import { onMount } from "svelte";
 
   import logo from "../../../assets/snowglobe-logo.webp";
-  import { maximumResultBytes, maximumViewportRows } from "./mvp-limits";
+  import { maximumViewportRows } from "./mvp-limits";
   import {
     getRequest,
     listRequests,
-    openResultStream,
     type RequestSummary,
   } from "./result-api";
   import "./styles.css";
@@ -74,8 +73,7 @@
     loadingRequest = id;
     loadFailed = false;
     try {
-      const stream = await openResultStream(id);
-      await databaseWorker.load(stream, maximumResultBytes);
+      await databaseWorker.load(id);
       viewport = await databaseWorker.viewport(0, maximumViewportRows);
       openedRequest = id;
     } catch {

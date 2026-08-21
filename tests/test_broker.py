@@ -60,22 +60,37 @@ def test_pending_submission_can_be_published_atomically() -> None:
     assert broker.open_source(request.request_id) is source
 
 
-def test_completed_synthetic_source_can_be_registered_in_one_step() -> None:
-    broker = InProcessBroker()
-    source = Source()
-
-    request = broker.submit(requested_ttl=timedelta(minutes=5), source=source)
-
-    assert request.status is RequestStatus.COMPLETE
-    assert broker.open_source(request.request_id) is source
-
-
 def test_requests_are_listed_most_recent_first() -> None:
     broker = InProcessBroker()
     first = broker.submit(requested_ttl=timedelta(minutes=5))
     second = broker.submit(requested_ttl=timedelta(minutes=5))
 
     assert broker.list_requests() == (second, first)
+
+
+def test_request_history_evicts_the_oldest_terminal_record() -> None:
+    broker = InProcessBroker(maximum_requests=2)
+    first = broker.submit(requested_ttl=timedelta(minutes=5))
+    broker.fail(first.request_id)
+    second = broker.submit(requested_ttl=timedelta(minutes=5))
+    second = broker.fail(second.request_id)
+
+    third = broker.submit(requested_ttl=timedelta(minutes=5))
+
+    assert broker.list_requests() == (third, second)
+    with pytest.raises(RequestUnavailable):
+        broker.get_request(first.request_id)
+
+
+def test_request_history_never_evicts_live_results() -> None:
+    broker = InProcessBroker(maximum_requests=1)
+    complete = broker.submit(requested_ttl=timedelta(minutes=5))
+    broker.publish(complete.request_id, Source())
+
+    with pytest.raises(RequestUnavailable):
+        broker.submit(requested_ttl=timedelta(minutes=5))
+
+    assert broker.open_source(complete.request_id) is not None
 
 
 def test_pending_request_capacity_is_atomic_and_reopens_after_terminal_state() -> None:
@@ -91,22 +106,25 @@ def test_pending_request_capacity_is_atomic_and_reopens_after_terminal_state() -
     assert second.status is RequestStatus.PENDING
 
 
-def test_completed_synthetic_source_does_not_consume_pending_capacity() -> None:
+def test_completed_request_does_not_consume_pending_capacity() -> None:
     broker = InProcessBroker(maximum_pending_requests=1)
+    complete = broker.submit(requested_ttl=timedelta(minutes=5))
+    broker.publish(complete.request_id, Source())
+
     pending = broker.submit(requested_ttl=timedelta(minutes=5))
 
-    complete = broker.submit(requested_ttl=timedelta(minutes=5), source=Source())
-
     assert pending.status is RequestStatus.PENDING
-    assert complete.status is RequestStatus.COMPLETE
+    assert broker.get_request(complete.request_id).status is RequestStatus.COMPLETE
 
 
 def test_failed_cancelled_and_expired_requests_have_no_result_source() -> None:
     clock = Clock(datetime(2026, 8, 18, tzinfo=UTC))
     broker = InProcessBroker(clock=clock)
     failed = broker.submit(requested_ttl=timedelta(minutes=5))
-    cancelled = broker.submit(requested_ttl=timedelta(minutes=5), source=Source())
-    expired = broker.submit(requested_ttl=timedelta(minutes=1), source=Source())
+    cancelled = broker.submit(requested_ttl=timedelta(minutes=5))
+    expired = broker.submit(requested_ttl=timedelta(minutes=1))
+    broker.publish(cancelled.request_id, Source())
+    broker.publish(expired.request_id, Source())
 
     assert broker.fail(failed.request_id).status is RequestStatus.FAILED
     assert broker.cancel(cancelled.request_id).status is RequestStatus.CANCELLED
@@ -233,7 +251,7 @@ def test_expiry_cancels_driver_cursor_after_releasing_the_broker_lock() -> None:
     clock = Clock(datetime(2026, 8, 18, tzinfo=UTC))
     broker = InProcessBroker(clock=clock)
     expiring = broker.submit(requested_ttl=timedelta(minutes=1))
-    other = broker.submit(requested_ttl=timedelta(minutes=5), source=Source())
+    other = broker.submit(requested_ttl=timedelta(minutes=5))
     cancellation_started = Event()
     cancellation_release = Event()
     other_accessed = Event()

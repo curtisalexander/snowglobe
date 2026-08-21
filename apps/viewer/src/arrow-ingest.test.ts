@@ -22,7 +22,6 @@ describe("incremental Arrow ingestion", () => {
         },
       },
       "pending",
-      1024,
       async () => {
         published = true;
       },
@@ -51,7 +50,6 @@ describe("incremental Arrow ingestion", () => {
         async insertArrowFromIPCStream() {},
       },
       "pending",
-      1024,
       async () => {
         published = true;
       },

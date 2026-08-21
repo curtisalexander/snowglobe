@@ -39,7 +39,7 @@ export function registerSnowglobe(pi: ExtensionAPI, runner: typeof runProcess = 
         params.sql,
         signal,
         45_000,
-      );
+      ).catch(() => undefined);
       const receipt = (output && parseSubmissionReceipt(output)) || unavailableSubmission();
       return { content: [{ type: "text", text: JSON.stringify(receipt) }], details: {} };
     },
@@ -63,7 +63,7 @@ export function registerSnowglobe(pi: ExtensionAPI, runner: typeof runProcess = 
         "",
         signal,
         15_000,
-      );
+      ).catch(() => undefined);
       const parsed = output ? parseStatusReceipt(output) : undefined;
       const receipt =
         parsed?.request_id === params.request_id ? parsed : unavailableStatus(params.request_id);

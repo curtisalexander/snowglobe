@@ -1,9 +1,9 @@
-# Connected MVP value-free evidence template
+# Connected MVP boundary evidence template
 
-Copy this template to a private location outside the repository before filling it in.
-Retain only the fields below. Do not record SQL, profile values, account/object names,
-credentials, result values or columns, Snowflake query IDs, driver errors, request
-timings, result sizes, query-history rows, screenshots, or usage values.
+This checklist tests Snowglobe's actual claim: result data stays out of MCP, CLI, and Pi
+receipts while the browser viewer can display it. Keep credentials out of the evidence.
+The connected campaign uses non-sensitive canaries, so screenshots or local diagnostics
+may be retained when useful; they do not prove what entered model context.
 
 ## Campaign
 
@@ -11,13 +11,13 @@ timings, result sizes, query-history rows, screenshots, or usage values.
 - Snowglobe revision:
 - Pi package revision (if used):
 - Dedicated non-production environment confirmed: PASS / FAIL
-- Expected grants independently confirmed: PASS / FAIL
-- Resource monitor independently confirmed active: PASS / FAIL
+- Expected read-only grants confirmed: PASS / FAIL
+- Resource limit confirmed active: PASS / FAIL
 - Loopback-only listeners confirmed: PASS / FAIL
 
 ## Connected cases
 
-| Case | PASS / FAIL | Lifecycle or reason code only | Administrator confirms bounded execution and expected grants/usage |
+| Case | PASS / FAIL | MCP/CLI/Pi lifecycle or reason code | Execution/viewer observation |
 |---|---|---|---|
 | Connected preflight |  |  |  |
 | Allowed bounded canary |  |  |  |
@@ -30,7 +30,8 @@ timings, result sizes, query-history rows, screenshots, or usage values.
 | Mutation rejection |  | `POLICY_REJECTED` | No execution confirmed:  |
 | Multiple-statement rejection |  | `POLICY_REJECTED` | No execution confirmed:  |
 | Unapproved-object rejection |  | `POLICY_REJECTED` | No execution confirmed:  |
-| Table-producing-function rejection |  | `POLICY_REJECTED` | No execution confirmed:  |
+| Unknown table function or `RESULT_SCAN` rejection |  | `POLICY_REJECTED` | No execution confirmed:  |
+| Local `GENERATOR` / `FLATTEN` |  |  | Viewer result correct:  |
 | Stage rejection |  | `POLICY_REJECTED` | No execution confirmed:  |
 | Tool-selected config rejection |  | `INVALID_REQUEST` | No execution confirmed:  |
 | Statement timeout |  |  |  |
@@ -47,10 +48,11 @@ timings, result sizes, query-history rows, screenshots, or usage values.
 - Result canaries absent from CLI output: PASS / FAIL
 - Pi registers exactly two closed tools with one receipt in tool content: PASS / FAIL
 - Result canaries absent from Pi tool content and details: PASS / FAIL
-- SQL absent from MCP responses and ordinary output: PASS / FAIL
-- Result-derived data and Snowflake details absent from logs, errors, and URLs: PASS / FAIL
+- Submitted SQL absent from MCP, CLI, and Pi responses: PASS / FAIL
+- Snowflake connector logger remains suppressed: PASS / FAIL
 - Result data absent from browser storage and service workers: PASS / FAIL
-- Complete canary result visible only through the local viewer path: PASS / FAIL
+- Complete canary result visible through the local viewer path: PASS / FAIL
+- Main thread receives only lifecycle metadata and bounded viewport messages: PASS / FAIL
 
 ## Local checks
 

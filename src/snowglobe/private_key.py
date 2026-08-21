@@ -1,4 +1,4 @@
-"""Snowflake RSA private-key loading with detail-free failures."""
+"""Snowflake RSA private-key loading."""
 
 from pathlib import Path
 
@@ -7,7 +7,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 
 class PrivateKeyError(Exception):
-    """A deliberately detail-free private-key failure."""
+    """A local private-key loading failure."""
 
 
 def load_private_key(path: Path) -> bytes:
@@ -15,16 +15,20 @@ def load_private_key(path: Path) -> bytes:
 
     try:
         key_bytes = path.read_bytes()
+    except OSError as error:
+        raise PrivateKeyError(f"could not read private key {path}: {error}") from error
+
+    try:
         try:
             key = serialization.load_pem_private_key(key_bytes, password=None)
         except ValueError:
             key = serialization.load_der_private_key(key_bytes, password=None)
-        if not isinstance(key, RSAPrivateKey):
-            raise PrivateKeyError
-        return key.private_bytes(
-            encoding=serialization.Encoding.DER,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption(),
-        )
-    except (OSError, TypeError, ValueError, PrivateKeyError) as error:
-        raise PrivateKeyError from error
+    except (TypeError, ValueError) as error:
+        raise PrivateKeyError(f"could not parse private key {path}: {error}") from error
+    if not isinstance(key, RSAPrivateKey):
+        raise PrivateKeyError(f"private key {path} must be RSA")
+    return key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )

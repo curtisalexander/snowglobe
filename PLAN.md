@@ -1,8 +1,8 @@
 # Snowglobe plan
 
 **Status:** Ready for connected MVP validation
-**Last updated:** August 20, 2026
-**Current decision:** [ADR 0017](docs/decisions/0017-minimal-model-context-boundary.md)
+**Last updated:** August 21, 2026
+**Current decision:** [ADR 0019](docs/decisions/0019-relation-centric-sql-authorization.md)
 
 ## Product
 
@@ -38,9 +38,13 @@ and outside the MCP contract.
 ## Architecture that pays for itself
 
 - One loopback process owns MCP, viewer routes, execution, and the in-memory broker.
+- The broker retains at most 100 active and recent requests without evicting live
+  results to make room.
 - A fixed Snowflake profile owns the role, warehouse, database, authenticator, and key.
 - SQLGlot accepts one read query, restricts external relations to configured views,
-  and applies a server-owned row cap. Snowflake read-only grants prevent mutation.
+  re-authorizes generated SQL, and applies a server-owned row cap. Unknown relation
+  sources fail closed; ordinary query expressions remain available. Snowflake
+  read-only grants independently prevent mutation.
 - Connection, queue, statement, and socket timeouts bound work and cost.
 - Arrow retrieval is incremental and admitted once before publication using row,
   column, cell, serialized-byte, and decoded-memory limits.
@@ -50,6 +54,8 @@ and outside the MCP contract.
 - Cancellation, expiry, resource cleanup, and shutdown handling are correctness
   controls. Viewer responses use `no-store`; browser results are not automatically
   persisted.
+- Local configuration and startup commands may report actionable operator diagnostics;
+  model-facing MCP, CLI, and Pi failures remain closed receipts.
 
 ## Current verification target
 

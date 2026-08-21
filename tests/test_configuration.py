@@ -35,16 +35,15 @@ allowed_views = ["GOVERNED_DATABASE.GOVERNED_SCHEMA.APPROVED_VIEW"]
 """
 
 
-def write_secure(path: Path, contents: str) -> None:
+def write_config(path: Path, contents: str) -> None:
     path.write_text(contents, encoding="utf-8")
-    path.chmod(0o600)
 
 
 def test_loads_native_snowflake_profile_and_separate_policy(tmp_path: Path) -> None:
     connections_path = tmp_path / "connections.toml"
     snowglobe_path = tmp_path / "snowglobe.toml"
-    write_secure(connections_path, VALID_CONNECTIONS)
-    write_secure(snowglobe_path, VALID_SNOWGLOBE_CONFIG)
+    write_config(connections_path, VALID_CONNECTIONS)
+    write_config(snowglobe_path, VALID_SNOWGLOBE_CONFIG)
 
     connection = load_snowflake_profile(connections_path, "default")
     snowglobe_profile = load_snowglobe_profile(snowglobe_path, "default")
@@ -64,9 +63,8 @@ def test_builds_only_explicit_connector_arguments(tmp_path: Path) -> None:
             encryption_algorithm=serialization.NoEncryption(),
         )
     )
-    key_path.chmod(0o600)
     connections_path = tmp_path / "connections.toml"
-    write_secure(
+    write_config(
         connections_path,
         VALID_CONNECTIONS.replace('"~/snowglobe-key.p8"', json.dumps(str(key_path))),
     )
@@ -121,14 +119,14 @@ def test_builds_only_explicit_connector_arguments(tmp_path: Path) -> None:
         VALID_CONNECTIONS.replace('warehouse = "SNOWGLOBE_WAREHOUSE"\n', ""),
     ],
 )
-def test_rejects_invalid_connection_without_detail(tmp_path: Path, config: str) -> None:
+def test_rejects_invalid_connection_with_local_diagnostic(tmp_path: Path, config: str) -> None:
     path = tmp_path / "sensitive-name.toml"
-    write_secure(path, config)
+    write_config(path, config)
 
     with pytest.raises(ConfigurationError) as caught:
         load_snowflake_profile(path, "default")
 
-    assert str(caught.value) == ""
+    assert str(caught.value)
 
 
 @pytest.mark.parametrize(
@@ -146,11 +144,13 @@ def test_rejects_invalid_connection_without_detail(tmp_path: Path, config: str) 
         ),
     ],
 )
-def test_rejects_invalid_snowglobe_config_without_detail(tmp_path: Path, config: str) -> None:
+def test_rejects_invalid_snowglobe_config_with_local_diagnostic(
+    tmp_path: Path, config: str
+) -> None:
     path = tmp_path / "sensitive-name.toml"
-    write_secure(path, config)
+    write_config(path, config)
 
     with pytest.raises(ConfigurationError) as caught:
         load_snowglobe_profile(path, "default")
 
-    assert str(caught.value) == ""
+    assert str(caught.value)

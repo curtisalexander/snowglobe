@@ -44,7 +44,6 @@ function isExactObject(value: unknown, keys: string[]): value is Record<string, 
 }
 
 function parseJson(text: string): unknown {
-  if (Buffer.byteLength(text, "utf8") > 4096) return undefined;
   try {
     return JSON.parse(text);
   } catch {

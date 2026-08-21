@@ -57,7 +57,7 @@ Implemented pieces include:
   agents;
 - an installable Pi package with two native typed tools;
 - a single-analyst broker with pending, complete, failed, cancelled, and expired
-  lifecycle states;
+  lifecycle states and at most 100 active/recent records;
 - a configured background Snowflake executor that fetches incrementally and publishes
   only admitted results;
 - local viewer routes to list, find, and stream a request;
@@ -65,15 +65,15 @@ Implemented pieces include:
 - in-memory DuckDB-Wasm ingestion with a bounded main-thread viewport.
 
 The submit tool returns `SERVICE_UNAVAILABLE` unless the supported launcher is
-explicitly given a local configuration file. The real executor and minimum browser
-boundary assurance and the [Gate 5 constrained-test runbook](docs/constrained-mvp-runbook.md)
-now exist. `SECURITY.md` authorizes only that constrained connected test.
+explicitly given a local configuration file. The real executor, browser worker path,
+and [connected validation runbook](docs/constrained-mvp-runbook.md) now exist.
 
 - [Implementation plan](PLAN.md)
-- [Constrained MVP test runbook](docs/constrained-mvp-runbook.md)
+- [Connected MVP validation runbook](docs/constrained-mvp-runbook.md)
 - [Getting started](docs/getting-started.md)
 - [Developer architecture and review guide](docs/developer-guide.md)
-- [Value-free MVP evidence template](docs/mvp-evidence-template.md)
+- [Governed SQL policy and examples](docs/sql-policy.md)
+- [Boundary-focused MVP evidence template](docs/mvp-evidence-template.md)
 - [Single-analyst architecture decision](docs/decisions/0008-single-analyst-loopback-runtime.md)
 - [Threat model](docs/threat-model.md)
 - [Security policy](SECURITY.md)
@@ -182,14 +182,12 @@ before starting either process. The Snowflake executor reads a native local
 `connections.toml` profile and a matching Snowglobe policy profile from
 `snowglobe.toml`. Start from [`connections.example.toml`](connections.example.toml)
 and [`snowglobe.example.toml`](snowglobe.example.toml); never commit the real files or
-private key. Keep them in an access-controlled location outside the repository and
-agent-visible workspaces. Snowglobe does not inspect file ownership or permissions.
+private key. Store them according to your normal local secret-management practice;
+Snowglobe does not inspect file ownership or permissions.
 
-```bash
-chmod 600 connections.toml snowglobe.toml /path/to/snowflake-key.p8
-```
-
-Validate the local profile and key without connecting to Snowflake:
+Validate the local profile and key without connecting to Snowflake. Failures include
+local configuration details so the analyst can correct them; these operator diagnostics
+are not returned by MCP, the result-free CLI, or Pi.
 
 ```bash
 uv run snowglobe-preflight \
@@ -219,7 +217,13 @@ current viewer.
 Each Snowglobe policy profile has an exact `allowed_views` list. MVP queries must
 reference those views as fully qualified `DATABASE.SCHEMA.VIEW` names. Snowglobe
 accepts ordinary read-query expressions and functions; the configured read-only role
-is responsible for preventing mutation and unauthorized object access.
+is responsible for preventing mutation and unauthorized object access. Local
+`GENERATOR` and `FLATTEN` row sources are accepted; alternate data sources such as
+`RESULT_SCAN`, stages, and custom table functions are not.
+
+The [governed SQL policy](docs/sql-policy.md) documents the precise guarantee,
+accepted and rejected examples, generated-SQL reauthorization, deliberate limits, and
+the rule for adding new Snowflake syntax without weakening relation enforcement.
 
 Use the [getting-started guide](docs/getting-started.md) for the complete clone,
 Snowflake profile, preflight, launch, Amp, Codex, Claude Code, Continue.dev, first-query,

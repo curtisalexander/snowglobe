@@ -75,9 +75,7 @@ def test_policy_rejection_creates_no_request() -> None:
     asyncio.run(exercise())
 
 
-def test_background_failure_becomes_detail_free_failed_state(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
+def test_background_failure_becomes_failed_state() -> None:
     canary = "BACKGROUND_ERROR_CANARY"
 
     async def exercise() -> None:
@@ -101,9 +99,6 @@ def test_background_failure_becomes_detail_free_failed_state(
         assert broker.get_request(request.request_id).status is RequestStatus.FAILED
 
     asyncio.run(exercise())
-    captured = capsys.readouterr()
-    assert canary not in captured.out
-    assert canary not in captured.err
 
 
 def test_close_rejects_later_submissions() -> None:

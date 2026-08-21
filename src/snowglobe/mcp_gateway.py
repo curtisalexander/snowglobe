@@ -21,7 +21,6 @@ from snowglobe.contracts import (
     ReasonCode,
 )
 from snowglobe.control import ControlPlane, invalid_status_receipt, rejected_receipt
-from snowglobe.runtime import runtime
 
 SUBMIT_TOOL_NAME = "submit_read_query"
 STATUS_TOOL_NAME = "get_query_status"
@@ -198,10 +197,3 @@ def _receipt_result(receipt: QueryReceipt | QueryStatusReceipt) -> CallToolResul
         ],
         structured_content=structured_content,
     )
-
-
-server = create_server(runtime.control)
-
-# This app is useful for transport tests; the supported local launcher composes its
-# routes with the viewer backend so both paths share one process-local broker.
-app = server.streamable_http_app(stateless_http=True, json_response=True, debug=False)

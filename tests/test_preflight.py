@@ -41,7 +41,6 @@ def write_profile(tmp_path: Path) -> tuple[Path, Path]:
             encryption_algorithm=serialization.NoEncryption(),
         )
     )
-    key_path.chmod(0o600)
     connections_path = tmp_path / "connections.toml"
     connections_path.write_text(
         f"""\
@@ -56,7 +55,6 @@ role = "SNOWGLOBE_READER"
 """,
         encoding="utf-8",
     )
-    connections_path.chmod(0o600)
     snowglobe_path = tmp_path / "snowglobe.toml"
     snowglobe_path.write_text(
         """\
@@ -67,7 +65,6 @@ allowed_views = ["GOVERNED_DATABASE.GOVERNED_SCHEMA.APPROVED_VIEW"]
 """,
         encoding="utf-8",
     )
-    snowglobe_path.chmod(0o600)
     return connections_path, snowglobe_path
 
 
@@ -100,7 +97,7 @@ def test_connected_preflight_opens_no_query(tmp_path: Path) -> None:
     assert events == ["connect", "connection.cursor", "cursor.close", "connection.close"]
 
 
-def test_cli_output_does_not_expose_failure(
+def test_cli_reports_a_useful_local_failure(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -111,8 +108,8 @@ def test_cli_output_does_not_expose_failure(
 
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert captured.err == "Snowglobe preflight failed.\n"
-    assert canary not in captured.err
+    assert captured.err.startswith("Snowglobe preflight failed:")
+    assert canary in captured.err
 
 
 def test_cli_reports_value_free_success(

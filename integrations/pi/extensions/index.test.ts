@@ -5,7 +5,7 @@ import { registerSnowglobe } from "./index.ts";
 
 const requestId = "abcdefghijklmnopqrstuvwx";
 
-function registeredTools(output: string) {
+function registeredTools(output: string, runner = async () => output) {
   const tools: Array<{
     name: string;
     parameters: { additionalProperties?: boolean };
@@ -15,7 +15,6 @@ function registeredTools(output: string) {
     }>;
   }> = [];
   const pi = { registerTool: (tool: (typeof tools)[number]) => tools.push(tool) };
-  const runner = async () => output;
   registerSnowglobe(pi as unknown as ExtensionAPI, runner);
   return tools;
 }
@@ -47,6 +46,33 @@ test("does not pass malformed CLI result data into Pi context", async () => {
   assert.equal(receipt.status, "rejected");
   assert.equal(receipt.reason_code, "SERVICE_UNAVAILABLE");
   assert.doesNotMatch(result.content[0].text, /RESULT_VALUE_CANARY|SQL_CANARY/);
+});
+
+test("contains rejected runner errors for both model-facing tools", async () => {
+  const canary = "REJECTED_RUNNER_ERROR_CANARY";
+  const tools = registeredTools("", async () => {
+    throw new Error(canary);
+  });
+
+  const submission = await tools[0].execute(
+    "call-id",
+    { sql: "SQL_CANARY", requested_ttl: 300 },
+    undefined,
+  );
+  const status = await tools[1].execute("call-id", { request_id: requestId }, undefined);
+
+  assert.deepEqual(JSON.parse(submission.content[0].text), {
+    status: "rejected",
+    request_id: JSON.parse(submission.content[0].text).request_id,
+    reason_code: "SERVICE_UNAVAILABLE",
+  });
+  assert.deepEqual(JSON.parse(status.content[0].text), {
+    request_id: requestId,
+    status: "service_unavailable",
+  });
+  assert.doesNotMatch(submission.content[0].text + status.content[0].text, new RegExp(canary));
+  assert.deepEqual(submission.details, {});
+  assert.deepEqual(status.details, {});
 });
 
 test("passes an exact submission receipt with empty details", async () => {

@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { startDatabaseWorker, stateFromMessage } from "./worker";
+import { startDatabaseWorker } from "./worker";
 
 class FakeWorker {
   onmessage: ((event: MessageEvent) => void) | null = null;
   onerror: Worker["onerror"] = null;
   readonly messages: Array<Record<string, unknown>> = [];
   terminated = false;
-  failOnChunk = false;
-  malformedViewport = false;
+  failOnLoad = false;
+  holdLoad = false;
 
   postMessage(message: Record<string, unknown>): void {
     this.messages.push(message);
@@ -17,18 +17,17 @@ class FakeWorker {
         this.emit({ type: "ready" });
       } else if (message.type === "destroy" || message.type === "abort") {
         this.emit({ type: "destroyed" });
-      } else if (message.type === "stream-chunk" && this.failOnChunk) {
+      } else if (message.type === "load" && this.failOnLoad) {
         this.emit({ type: "failed" });
+      } else if (message.type === "load" && this.holdLoad) {
+        return;
       } else if (message.type === "viewport") {
         this.emit({
           type: "viewport",
           sequence: message.sequence,
-          viewport: this.malformedViewport
-            ? { columns: [], rows: "invalid", hasMore: false }
-            : { columns: ["value"], rows: [["ok"]], hasMore: false },
+          viewport: { columns: ["value"], rows: [["ok"]], hasMore: false },
         });
       } else {
-        if (message.type === "stream-end") this.emit({ type: "published" });
         this.emit({ type: "ack", sequence: message.sequence });
       }
     });
@@ -43,30 +42,13 @@ class FakeWorker {
   }
 }
 
-function stream(...chunks: Uint8Array[]): ReadableStream<Uint8Array> {
-  return new ReadableStream({
-    start(controller) {
-      for (const chunk of chunks) controller.enqueue(chunk);
-      controller.close();
-    },
-  });
-}
-
 describe("database worker messages", () => {
-  it("maps only lifecycle messages to visible states", () => {
-    expect(stateFromMessage("ready")).toBe("ready");
-    expect(stateFromMessage("published")).toBe("ready");
-    expect(stateFromMessage("failed")).toBe("failed");
-    expect(stateFromMessage("viewport")).toBe("starting");
-    expect(stateFromMessage("contains-data")).toBe("starting");
-  });
-
   it("destroys the one-result worker if another request tries to reuse it", async () => {
     const underlying = new FakeWorker();
     const worker = startDatabaseWorker(() => undefined, () => underlying);
 
-    await worker.load(stream(new Uint8Array([1])), 1024);
-    await expect(worker.load(stream(new Uint8Array([2])), 1024)).rejects.toThrow(
+    await worker.load("abcdefghijklmnopqrstuvwx");
+    await expect(worker.load("zyxwvutsrqponmlkjihgfedc")).rejects.toThrow(
       "Database worker unavailable",
     );
     await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
@@ -75,24 +57,16 @@ describe("database worker messages", () => {
     expect(underlying.terminated).toBe(true);
   });
 
-  it("cancels input and terminates after a stream or overflow failure", async () => {
+  it("terminates after a result load failure", async () => {
     const underlying = new FakeWorker();
-    underlying.failOnChunk = true;
-    let cancelled = false;
-    const input = new ReadableStream<Uint8Array>({
-      pull(controller) {
-        controller.enqueue(new Uint8Array([1]));
-      },
-      cancel() {
-        cancelled = true;
-      },
-    });
+    underlying.failOnLoad = true;
     const states: string[] = [];
     const worker = startDatabaseWorker((state) => states.push(state), () => underlying);
 
-    await expect(worker.load(input, 1)).rejects.toThrow("Database worker unavailable");
+    await expect(worker.load("abcdefghijklmnopqrstuvwx")).rejects.toThrow(
+      "Database worker unavailable",
+    );
 
-    expect(cancelled).toBe(true);
     expect(states).toContain("failed");
     expect(underlying.terminated).toBe(true);
   });
@@ -109,30 +83,26 @@ describe("database worker messages", () => {
     expect(underlying.terminated).toBe(true);
   });
 
-  it("cancels an active input stream when the viewer closes", async () => {
+  it("rejects an active load when the viewer closes", async () => {
     const underlying = new FakeWorker();
-    let cancelled = false;
-    const input = new ReadableStream<Uint8Array>({
-      cancel() {
-        cancelled = true;
-      },
-    });
+    underlying.holdLoad = true;
     const worker = startDatabaseWorker(() => undefined, () => underlying);
-    const loading = worker.load(input, 1024);
+    const loading = worker.load("abcdefghijklmnopqrstuvwx");
     await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
 
     worker.destroy();
 
     await expect(loading).rejects.toThrow("Database worker unavailable");
-    expect(cancelled).toBe(true);
   });
 
-  it("rejects a malformed viewport reply", async () => {
-    const underlying = new FakeWorker();
-    underlying.malformedViewport = true;
-    const worker = startDatabaseWorker(() => undefined, () => underlying);
+  it("returns a correlated viewport reply", async () => {
+    const worker = startDatabaseWorker(() => undefined, () => new FakeWorker());
+    await worker.load("abcdefghijklmnopqrstuvwx");
 
-    await expect(worker.viewport(0, 50)).rejects.toThrow("Database worker unavailable");
-    expect(underlying.terminated).toBe(true);
+    await expect(worker.viewport(0, 50)).resolves.toEqual({
+      columns: ["value"],
+      rows: [["ok"]],
+      hasMore: false,
+    });
   });
 });

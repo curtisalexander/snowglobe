@@ -6,6 +6,8 @@
 - [Architecture decisions](decisions/README.md) — accepted technical and security decisions; these take precedence when older source material differs.
 - [Local threat model](threat-model.md) — loopback trust boundary, data flows, limitations, and required evidence.
 - [Snowflake configuration](configuration.md) — current `connections.toml` contract.
+- [Governed SQL policy](sql-policy.md) — exact authorization boundary with accepted,
+  rejected, and extension examples.
 - [Getting started](getting-started.md) — clone, Snowflake setup, preflight, launch,
   Amp, Codex, Claude Code, Continue.dev, Pi, and the first result-free agent flow.
 - [Developer guide](developer-guide.md) — implemented architecture, end-to-end call
@@ -13,10 +15,10 @@
 - [Result-free CLI decision](decisions/0013-result-free-cli-adapter.md) — how Pi and
   other shell-only agents use the running MCP service without adding a data channel.
 - [Pi integration](pi-integration.md) — install and use Snowglobe's native Pi tools.
-- [Constrained MVP runbook](constrained-mvp-runbook.md) — exact non-production setup,
+- [Connected MVP validation runbook](constrained-mvp-runbook.md) — non-production setup,
   operation, lifecycle, shutdown, restart, and evidence procedure for Gate 5.
-- [Connected MVP evidence template](mvp-evidence-template.md) — value-free checklist
-  to copy outside the repository for the connected campaign.
+- [Connected MVP evidence template](mvp-evidence-template.md) — focused model-output
+  and viewer-lifecycle checklist for the connected campaign.
 - [Querido reuse audit](querido-reference.md) — pinned source review and reuse boundary.
 
 ## Retained source material

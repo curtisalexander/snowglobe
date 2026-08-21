@@ -31,6 +31,14 @@ def policy() -> SnowflakeSqlPolicy:
             "SELECT * FROM (SELECT * FROM approved) AS nested LIMIT 51",
         ),
         (
+            f"SELECT left_side.account_id FROM {APPROVED_VIEW} AS left_side "
+            f"JOIN {APPROVED_VIEW} AS right_side "
+            "ON left_side.account_id = right_side.account_id",
+            f"SELECT left_side.account_id FROM {APPROVED_VIEW} AS left_side "
+            f"JOIN {APPROVED_VIEW} AS right_side "
+            "ON left_side.account_id = right_side.account_id LIMIT 51",
+        ),
+        (
             "SELECT * FROM (VALUES (1), (2)) AS local_values(value)",
             "SELECT * FROM (VALUES (1), (2)) AS local_values(value) LIMIT 51",
         ),
@@ -56,6 +64,26 @@ def policy() -> SnowflakeSqlPolicy:
             f"SELECT account_id FROM {APPROVED_VIEW}",
             f"SELECT account_id FROM {APPROVED_VIEW} UNION ALL "
             f"SELECT account_id FROM {APPROVED_VIEW} LIMIT 51",
+        ),
+        (
+            "SELECT * FROM TABLE(GENERATOR(ROWCOUNT => 10))",
+            "SELECT * FROM TABLE(GENERATOR(ROWCOUNT => 10)) LIMIT 51",
+        ),
+        (
+            "SELECT * FROM TABLE(FLATTEN(INPUT => ARRAY_CONSTRUCT(1)))",
+            "SELECT * FROM TABLE(FLATTEN(INPUT => [1])) LIMIT 51",
+        ),
+        (
+            "SELECT * FROM TABLE(FLATTEN(INPUT => "
+            f"(SELECT ARRAY_AGG(account_id) FROM {APPROVED_VIEW})))",
+            "SELECT * FROM TABLE(FLATTEN(INPUT => "
+            f"(SELECT ARRAY_AGG(account_id) FROM {APPROVED_VIEW}))) LIMIT 51",
+        ),
+        (
+            f"SELECT * FROM {APPROVED_VIEW}, LATERAL FLATTEN(INPUT => ARRAY_CONSTRUCT(1))",
+            f"SELECT * FROM {APPROVED_VIEW}, "
+            "LATERAL FLATTEN(INPUT => [1]) AS _flattened(SEQ, KEY, PATH, INDEX, VALUE, THIS) "
+            "LIMIT 51",
         ),
         ("-- governed\nSELECT ';' AS marker;", "/* governed */ SELECT ';' AS marker LIMIT 51"),
     ],
@@ -99,11 +127,21 @@ def test_authorizes_read_query_and_applies_overflow_cap(
         "COPY INTO target FROM @stage",
         "COPY INTO @stage FROM (SELECT 1)",
         "SELECT * FROM GOVERNED_DATABASE.GOVERNED_SCHEMA.UNAPPROVED_VIEW",
+        f"SELECT * FROM {APPROVED_VIEW} JOIN "
+        "OTHER_DATABASE.OTHER_SCHEMA.SECRET_TABLE USING (account_id)",
+        f"SELECT * FROM {APPROVED_VIEW} UNION ALL "
+        "SELECT * FROM OTHER_DATABASE.OTHER_SCHEMA.SECRET_TABLE",
+        "WITH hidden AS (SELECT * FROM OTHER_DATABASE.OTHER_SCHEMA.SECRET_TABLE) "
+        "SELECT * FROM hidden",
         "SELECT * FROM GOVERNED_SCHEMA.APPROVED_VIEW",
         "SELECT * FROM APPROVED_VIEW",
         "SELECT * FROM TABLE(RESULT_SCAN('01abc'))",
-        "SELECT * FROM TABLE(GENERATOR(ROWCOUNT => 10))",
-        f"SELECT * FROM {APPROVED_VIEW}, LATERAL FLATTEN(INPUT => ARRAY_CONSTRUCT(1))",
+        "SELECT * FROM TABLE(UNREVIEWED_UDTF())",
+        "SELECT * FROM TABLE(OTHER_DATABASE.OTHER_SCHEMA.UNREVIEWED_UDTF())",
+        "SELECT * FROM TABLE(GENERATOR(ROWCOUNT => "
+        "(SELECT COUNT(*) FROM OTHER_DATABASE.OTHER_SCHEMA.SECRET_TABLE)))",
+        "SELECT * FROM TABLE(FLATTEN(INPUT => "
+        "(SELECT ARRAY_AGG(secret) FROM OTHER_DATABASE.OTHER_SCHEMA.SECRET_TABLE)))",
         "SELECT * FROM DIRECTORY(@stage)",
         'SELECT * FROM "governed_database"."GOVERNED_SCHEMA"."APPROVED_VIEW"',
         f"SELECT * FROM {APPROVED_VIEW} LIMIT NULL",
@@ -118,6 +156,19 @@ def test_rejects_non_queries_unapproved_relations_and_unbounded_limits(
         policy.authorize(sql)
 
     assert caught.value.__cause__ is None
+
+
+@pytest.mark.parametrize(
+    "target",
+    ["CREATED_TABLE", "OTHER_DATABASE.OTHER_SCHEMA.CREATED_TABLE"],
+)
+def test_rejects_query_shaped_input_that_generates_mutating_sql(
+    policy: SnowflakeSqlPolicy,
+    target: str,
+) -> None:
+    # SQLGlot parses SELECT INTO as Select but generates CREATE TABLE AS SELECT.
+    with pytest.raises(QueryPolicyRejected, match=r"^$"):
+        policy.authorize(f"SELECT * INTO {target} FROM {APPROVED_VIEW}")
 
 
 def test_cte_names_are_authorized_only_in_their_lexical_scope(

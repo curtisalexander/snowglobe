@@ -5,7 +5,7 @@ Snowglobe reads two analyst-owned local files with separate ownership:
 - a native Snowflake `connections.toml` containing connection definitions; and
 - a Snowglobe-owned `snowglobe.toml` containing versioned query policy.
 
-Neither file may be available to the SPA, browser, MCP responses, or ordinary logs. If
+Neither file is available to the SPA, browser, or MCP responses. If
 the coding agent can read all files owned by the analyst, filesystem secrecy from that
 agent is not a product guarantee; use operating-system or secret-manager controls when
 that distinction matters.
@@ -52,36 +52,31 @@ allowed_views = ["GOVERNED_DATABASE.GOVERNED_SCHEMA.APPROVED_VIEW"]
 The Snowglobe profile name must match the selected Snowflake connection name.
 `allowed_views` must be a non-empty, unique list of exact, fully qualified
 `DATABASE.SCHEMA.VIEW` relations accepted by SQL policy. The Snowglobe file has a
-closed, versioned schema; unknown or missing fields fail.
+closed, versioned schema; unknown or missing fields fail. Snowglobe treats each entry
+as an approved relation identity but does not query the catalog to verify its object
+type or transitive dependencies. Provision actual governed views and see the
+[governed SQL policy](sql-policy.md) for the exact boundary.
 
 ## Key and file handling
 
 While building connector arguments, Snowglobe reads the selected profile's
 `private_key_file`, deserializes an unencrypted PEM or DER RSA key, and converts it in
-memory to the PKCS#8 DER bytes expected by `snowflake.connector.connect`. It does not
-log, trace, serialize, or return the path or key bytes.
+memory to the PKCS#8 DER bytes expected by `snowflake.connector.connect`. Local
+preflight and startup failures may name the configured path so the analyst can fix the
+problem; key bytes are never logged, serialized, or returned.
 
 Snowglobe uses normal reads from the configured paths and trusts the analyst and
 operating system to manage file access. Another local account permitted to access a
 file can read or modify it without Snowglobe detecting that access. See
-[ADR 0017](decisions/0017-minimal-model-context-boundary.md). Encrypted-key
+[ADR 0018](decisions/0018-minimal-boundary-cleanup.md). Encrypted-key
 passphrases are intentionally not part of the file contract.
 
 - The real `connections.toml` and `snowglobe.toml` are ignored by Git.
-- Common private-key files (`*.pem`, `*.key`, and `*.p8`) are ignored, but deployment
-  policy must protect key material regardless of extension.
-- Keep both configuration files and the key outside the repository when possible.
+- Common private-key files (`*.pem`, `*.key`, and `*.p8`) are ignored; files with other
+  extensions still must not be committed.
 - Use absolute paths when invoking Snowglobe and for `private_key_file`.
-- Do not place this configuration in an agent workspace or browser-served directory.
+- Do not place this configuration in a browser-served directory.
 - Do not add a CLI or MCP tool that prints either resolved profile.
-
-On POSIX:
-
-```bash
-chmod 600 /absolute/private/path/connections.toml
-chmod 600 /absolute/private/path/snowglobe.toml
-chmod 600 /absolute/private/path/snowglobe-key.p8
-```
 
 The configured Snowflake identity is the analyst's local execution identity. Its role
 and Snowflake policies are the independent data-access boundary. Snowglobe does not add

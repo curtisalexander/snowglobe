@@ -1,8 +1,14 @@
 # ADR 0010: Minimum Snowflake SELECT policy
 
-- **Status:** Accepted; configuration ownership superseded by [ADR 0016](0016-separate-snowflake-and-snowglobe-configuration.md)
+- **Status:** Superseded by [ADR 0019](0019-relation-centric-sql-authorization.md);
+  configuration ownership superseded by
+  [ADR 0016](0016-separate-snowflake-and-snowglobe-configuration.md)
 - **Date:** August 19, 2026
 - **Builds on:** [ADR 0009](0009-constrained-snowflake-mvp-budgets.md)
+
+This record preserves the original MVP policy. ADR 0019 replaces its `Select`-only
+root, recursive expression allowlist, and function restrictions while retaining strict
+single-query, approved-relation, literal-limit, and generated-SQL enforcement.
 
 ## Context
 

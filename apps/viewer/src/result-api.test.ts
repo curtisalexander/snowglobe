@@ -122,13 +122,17 @@ describe("Result API client", () => {
       }),
     );
     vi.stubGlobal("fetch", fetchMock);
+    const controller = new AbortController();
 
-    await expect(openResultStream("abcdefghijklmnopqrstuvwx")).resolves.toBe(stream);
+    await expect(
+      openResultStream("abcdefghijklmnopqrstuvwx", controller.signal),
+    ).resolves.toBe(stream);
     expect(fetchMock).toHaveBeenCalledWith(
       "/v1/requests/abcdefghijklmnopqrstuvwx/stream",
       {
         cache: "no-store",
         headers: { Accept: "application/vnd.snowglobe.arrow-stream" },
+        signal: controller.signal,
       },
     );
   });

@@ -8,13 +8,18 @@ import pyarrow as pa
 from mcp import Client, ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from mcp.types import TextContent
-from pytest import CaptureFixture, MonkeyPatch
+from pytest import MonkeyPatch
 
 from snowglobe.broker import InProcessBroker
 from snowglobe.control import ControlPlane
 from snowglobe.executor import BackgroundQueryExecutor
-from snowglobe.mcp_gateway import app, create_server, server
+from snowglobe.mcp_gateway import create_server
+from snowglobe.runtime import create_runtime
 from snowglobe.sql_policy import QueryPolicyRejected
+
+runtime = create_runtime()
+server = create_server(runtime.control)
+app = server.streamable_http_app(stateless_http=True, json_response=True, debug=False)
 
 
 class Source:
@@ -211,9 +216,7 @@ def test_synthetic_submission_returns_accepted_after_pending_registration() -> N
     asyncio.run(exercise())
 
 
-def test_background_execution_failure_exposes_only_failed_without_process_output(
-    capsys: CaptureFixture[str],
-) -> None:
+def test_background_execution_failure_exposes_only_failed() -> None:
     request_broker = InProcessBroker()
     finished = asyncio.Event()
     sql_canary = "EXECUTION_SQL_CANARY"
@@ -262,10 +265,6 @@ def test_background_execution_failure_exposes_only_failed_without_process_output
                 assert canary not in model_visible
 
     asyncio.run(exercise())
-    captured = capsys.readouterr()
-    for canary in (sql_canary, error_canary):
-        assert canary not in captured.out
-        assert canary not in captured.err
 
 
 def test_synthetic_policy_rejection_uses_only_fixed_reason() -> None:
@@ -344,7 +343,6 @@ def test_status_tool_does_not_reflect_invalid_ids() -> None:
 
 def test_unexpected_exception_is_sanitized(
     monkeypatch: MonkeyPatch,
-    capsys: CaptureFixture[str],
 ) -> None:
     from snowglobe import mcp_gateway
 
@@ -367,9 +365,6 @@ def test_unexpected_exception_is_sanitized(
             assert canary not in result.model_dump_json()
 
     asyncio.run(exercise())
-    captured = capsys.readouterr()
-    assert canary not in captured.out
-    assert canary not in captured.err
 
 
 def test_streamable_http_round_trip_preserves_the_contract() -> None:

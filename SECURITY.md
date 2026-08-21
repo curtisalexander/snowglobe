@@ -24,9 +24,15 @@ Changes to MCP, CLI, or Pi schemas, output construction, errors, or transport re
 exact-contract and result-canary tests. Changes to the viewer path require a test that
 result canaries remain in the viewer path and absent from model-facing output.
 
+Local preflight and startup commands are operator interfaces, not model-facing query
+adapters, and may report configuration paths and validation details. Do not paste those
+diagnostics into an agent conversation. Snowglobe suppresses the Snowflake connector's
+own logger because its debug and exceptional paths can contain result payloads or result
+locations.
+
 Until connected validation is complete, use only a dedicated non-production Snowflake
 identity and non-sensitive test data. Do not include credentials or query results in
 issues or transcripts.
 
 See [PLAN.md](PLAN.md) and
-[ADR 0017](docs/decisions/0017-minimal-model-context-boundary.md).
+[ADR 0018](docs/decisions/0018-minimal-boundary-cleanup.md).

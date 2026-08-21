@@ -64,6 +64,8 @@ file path.
 The full connected campaign needs the additional empty, multi-batch, overflow,
 timeout, cancellation, and unapproved views in
 [runbook section 2](constrained-mvp-runbook.md#2-administrator-owned-environment-setup).
+The [governed SQL policy](sql-policy.md) explains which analytical query shapes are
+accepted and how every direct external relation is checked.
 
 ## 3. Create the private profiles
 
@@ -111,14 +113,8 @@ The same profile name selects the Snowflake connection and Snowglobe policy. The
 warehouse, database, authenticator, key path, and allowlist are launcher-owned. Never
 put them in a prompt or MCP tool arguments.
 
-Keep all three files in an access-controlled location outside the repository and
-agent-visible workspaces. Snowglobe does not inspect file ownership or permissions.
-
-```bash
-chmod 600 /absolute/private/path/connections.toml
-chmod 600 /absolute/private/path/snowglobe.toml
-chmod 600 /absolute/private/path/snowglobe-test-key.p8
-```
+Keep all three files untracked and manage them like your other local credentials.
+Snowglobe reads the paths you supply and does not inspect file ownership or permissions.
 
 See the [configuration reference](configuration.md) for the exact file contract and
 handling guidance.
@@ -134,8 +130,9 @@ uv run --locked --no-dev --extra snowflake snowglobe-preflight \
   --profile default
 ```
 
-The only successful output is `Snowglobe preflight passed.` Then, under the runbook's
-constrained exception, open and close one cursor without executing SQL:
+Successful output is `Snowglobe preflight passed.` A failure includes the local path or
+configuration detail needed to fix it. Then open and close one cursor without executing
+SQL:
 
 ```bash
 uv run --locked --no-dev --extra snowflake snowglobe-preflight \
@@ -145,8 +142,8 @@ uv run --locked --no-dev --extra snowflake snowglobe-preflight \
   --connect
 ```
 
-Have the administrator verify independently that the login selected the expected user,
-role, warehouse, and database and executed no statement. Stop if they differ.
+Verify that the login selected the expected user, role, warehouse, and database and
+executed no statement. Stop if they differ.
 
 ## 5. Start Snowglobe
 

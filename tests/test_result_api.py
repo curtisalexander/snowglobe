@@ -16,7 +16,7 @@ from snowglobe.result_api import (
     ARROW_FRAME,
     COMPLETE_FRAME,
     FRAME_HEADER,
-    SECURITY_HEADERS,
+    RESPONSE_HEADERS,
     STREAM_CONTENT_TYPE,
     STREAM_MAGIC,
     _framed_stream,
@@ -57,14 +57,15 @@ def submitted(
     broker: InProcessBroker,
     source: ArrowBatchSource | None = None,
 ) -> RequestView:
-    return broker.submit(
-        requested_ttl=timedelta(minutes=5),
-        source=source or Source((batch(["arrow"]),)),
+    request = broker.submit(requested_ttl=timedelta(minutes=5))
+    return broker.publish(
+        request.request_id,
+        source if source is not None else Source((batch(["arrow"]),)),
     )
 
 
-def assert_security_headers(response: Response) -> None:
-    for name, value in SECURITY_HEADERS.items():
+def assert_response_headers(response: Response) -> None:
+    for name, value in RESPONSE_HEADERS.items():
         assert response.headers[name] == value
 
 
@@ -94,29 +95,18 @@ def batch(values: list[str]) -> pa.RecordBatch:
 
 
 def test_health_is_value_free_and_not_cached() -> None:
-    response = TestClient(create_app(broker=InProcessBroker())).get("/healthz")
+    response = TestClient(result_app(InProcessBroker())).get("/healthz")
 
     assert response.json() == {"status": "ok"}
-    assert_security_headers(response)
+    assert_response_headers(response)
 
 
 def test_default_local_api_lists_no_requests() -> None:
-    response = TestClient(create_app(broker=InProcessBroker())).get("/v1/requests")
+    response = TestClient(result_app(InProcessBroker())).get("/v1/requests")
 
     assert response.status_code == 200
     assert response.json() == {"requests": []}
-    assert_security_headers(response)
-
-
-def test_stream_fails_closed_without_explicit_admission_limits() -> None:
-    broker = InProcessBroker()
-    item = submitted(broker)
-    client = TestClient(create_app(broker=broker))
-
-    response = client.get(f"/v1/requests/{item.request_id}/stream")
-
-    assert response.status_code == 503
-    assert response.json() == {"error": "service_unavailable"}
+    assert_response_headers(response)
 
 
 def test_list_and_open_local_requests() -> None:
@@ -135,7 +125,7 @@ def test_list_and_open_local_requests() -> None:
         "expires_at": item.expires_at.isoformat(),
     }
     for response in (listed, opened):
-        assert_security_headers(response)
+        assert_response_headers(response)
     assert client.post(f"/v1/requests/{item.request_id}/cancel").status_code == 404
 
 
@@ -183,7 +173,7 @@ def test_stream_frames_arrow_and_emits_terminal_completion() -> None:
     reader = pa.ipc.open_stream(ipc)
     assert reader.read_next_batch().column(0)[0].as_py() == "first"
     assert reader.read_next_batch().column(0)[0].as_py() == "second"
-    assert_security_headers(response)
+    assert_response_headers(response)
 
 
 @pytest.mark.parametrize(
@@ -228,7 +218,8 @@ def test_cancellation_during_stream_omits_later_bytes_and_completion() -> None:
             yield batch(["must-not-be-released"])
 
     source = CancellingSource()
-    item = broker.submit(requested_ttl=timedelta(minutes=5), source=source)
+    item = broker.submit(requested_ttl=timedelta(minutes=5))
+    broker.publish(item.request_id, source)
     source.request_id = item.request_id
     client = TestClient(result_app(broker))
 

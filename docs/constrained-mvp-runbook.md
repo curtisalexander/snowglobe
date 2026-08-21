@@ -1,19 +1,16 @@
-# Constrained Snowflake MVP test runbook
+# Connected Snowflake MVP validation runbook
 
-This runbook is the only supported procedure for Snowglobe's first connected test. It
-is for a dedicated, non-production Snowflake environment containing only non-sensitive
-canary data. It does not authorize production credentials, production data, routine
-analyst use, remote exposure, or sensitive results.
+Use this runbook for Snowglobe's first connected validation in a non-production
+Snowflake environment containing non-sensitive canary data. It is not yet a production
+readiness claim.
 
-`SECURITY.md` remains authoritative. Commands marked **connected** are permitted only
-while every condition in its constrained connected-MVP exception remains true. Never
-put a real `connections.toml`, a private key, query-result bytes, or Snowflake
-administrative output in the repository, an agent transcript, a test artifact, or
-ordinary logs.
+`SECURITY.md` remains authoritative. Never commit a real `connections.toml`, a private
+key, or result data. Never paste credentials, result data, or local operator diagnostics
+into an agent transcript.
 
 ## 1. Roles and stopping conditions
 
-Two people or independently performed roles are required:
+The same analyst may perform both roles; a second person is not required:
 
 - The **Snowflake administrator** provisions and inspects the test account, role,
   user, warehouse, resource monitor, views, query history, usage, and grants outside
@@ -66,8 +63,7 @@ operator a key:
 The allowed views must return no more than 32 columns except when deliberately testing
 column overflow. No approved view may reference production or sensitive data.
 
-Before the key is used, the administrator must independently confirm, using Snowflake
-administrative interfaces rather than Snowglobe:
+Before the key is used, confirm through Snowflake rather than Snowglobe:
 
 - grants to the test user and role contain no broader assigned or inherited role,
   ownership, create, insert, update, delete, truncate, merge, stage, procedure, or
@@ -76,10 +72,6 @@ administrative interfaces rather than Snowglobe:
   intended test objects;
 - the resource monitor is assigned and active; and
 - query history and warehouse metering are visible to the administrator.
-
-Record only pass/fail for these checks in the retained evidence. Do not copy grant
-rows, account identifiers, object names, or administrative output into agent-visible
-artifacts.
 
 ## 3. Local setup
 
@@ -100,14 +92,8 @@ Use an existing native Snowflake `connections.toml`, or copy
 profile's `allowed_views` must contain only the fully qualified
 administrator-approved views; use `database`, never `db`.
 
-Keep the profile and key in an access-controlled location outside the repository and
-agent-visible workspaces. Snowglobe does not inspect ownership or permissions.
-
-```bash
-chmod 600 /absolute/private/path/connections.toml
-chmod 600 /absolute/private/path/snowglobe.toml
-chmod 600 /absolute/private/path/snowglobe-test-key.p8
-```
+Keep the profile and key untracked and manage them like your other local credentials.
+Snowglobe does not inspect ownership or permissions.
 
 Validate configuration, key parsing, and the SQL view allowlist without connecting:
 
@@ -118,13 +104,10 @@ uv run snowglobe-preflight \
   --profile default
 ```
 
-The only expected output is `Snowglobe preflight passed.` On failure, the only public
-message is `Snowglobe preflight failed.` Resolve the local file or profile problem
-without printing the profile, key, exception, or path contents.
+Successful output is `Snowglobe preflight passed.` On failure, use the reported local
+path or configuration detail to correct the profile or key.
 
 ## 4. Connected preflight
-
-**Connected — permitted only by the constrained exception in `SECURITY.md`.**
 
 Open and close one Snowflake cursor without executing SQL:
 
@@ -136,13 +119,13 @@ uv run snowglobe-preflight \
   --connect
 ```
 
-Require the same fixed pass message. The administrator must then verify that the login
-used the dedicated user, role, and warehouse and did not execute a statement. Stop if
-the selected context differs from the reviewed configuration.
+Require the same fixed pass message. Then verify that the login used the dedicated user,
+role, and warehouse and did not execute a statement. Stop if the selected context
+differs from the reviewed configuration.
 
 ## 5. Launch
 
-**Connected.** Start the single broker-owning runtime in one terminal:
+Start the single broker-owning runtime in one terminal:
 
 ```bash
 uv run snowglobe-local \
@@ -222,10 +205,10 @@ rows, counts, timing, or errors from the lifecycle state.
 
 For a `complete` request, open the viewer, select the recent request or paste the same
 ID, and choose **Open result**. Confirm the expected non-sensitive values and column
-canaries appear only in the rendered viewer. Do not use browser developer tools,
-screenshots, copy, export, or shell HTTP clients to inspect the result stream itself.
-Reload or close the page after inspection to destroy the worker and in-memory DuckDB
-state.
+canaries appear in the rendered viewer. Browser developer tools and screenshots are
+fine for this non-sensitive validation, but they are not evidence about what MCP
+returned. Reload or close the page after inspection to destroy the worker and in-memory
+DuckDB state.
 
 ## 7. Expiry
 
@@ -257,8 +240,8 @@ to the administrator's key-revocation procedure.
 
 ## 9. Required connected checks and evidence
 
-Run the cases below while the administrator independently watches query history,
-grants, resource-monitor state, and warehouse usage:
+Run the cases below while watching query history, grants, resource-monitor state, and
+warehouse usage through Snowflake:
 
 | Case | Required observation |
 |---|---|
@@ -266,9 +249,10 @@ grants, resource-monitor state, and warehouse usage:
 | Empty result | `complete`; declared columns render with no rows |
 | Multiple batches, when the connector/account produces them at the 50-row cap | `complete`; all admitted rows render once and in order; otherwise record N/A and retain the deterministic local multi-batch test result |
 | More than 50 rows, 32 columns, 16-KiB cell, or 256-KiB Arrow/decoded | `failed`; no stream is published |
-| Mutation, multiple statements, unapproved object, table-producing function, or stage syntax | `POLICY_REJECTED`; no Snowflake query-history entry |
+| Mutation, multiple statements, unapproved object, unknown table function, `RESULT_SCAN`, or stage syntax | `POLICY_REJECTED`; no Snowflake query-history entry |
+| Local `GENERATOR` or `FLATTEN` | Accepted when the rest of the query satisfies policy |
 | Tool-supplied profile, role, warehouse, database, authenticator, or key path | closed-schema rejection; no Snowflake query-history entry |
-| Statement timeout or administrator-aborted pending query | only `failed`; no driver detail through MCP or ordinary output |
+| Statement timeout or administrator-aborted pending query | only `failed`; no driver detail through MCP, CLI, or Pi |
 | Cancellation | only `cancelled`; no result source; bounded Snowflake termination |
 | Expiry | only `expired`; no result source; bounded Snowflake termination if still running |
 | Runtime restart | pending work bounded; old ID becomes `not_found`; nothing restored |
@@ -278,12 +262,12 @@ closed fields. For Pi, check that exactly two tools are registered and tool cont
 one closed receipt. For CLI and Pi subprocess cases, check that stdout is bounded to
 one closed JSON receipt and stderr contains no submitted or result data. Result values
 and column names must be absent from all captured MCP traffic, Pi tool results, and CLI
-output; submitted SQL must not be reflected in responses. Result values, column names,
-SQL, Snowflake identifiers, counts, sizes, timing, and errors must be absent from
-process output, ordinary logs, and URLs. In the browser's Application inspection,
-confirm Local Storage, Session Storage, IndexedDB, Cache Storage, and OPFS contain no
-result data and that no service worker is registered; do not inspect the result stream
-in the Network panel.
+output; submitted SQL must not be reflected in those responses. Confirm that the
+Snowflake connector logger remains disabled because it is not safe for result-bearing
+queries. In the browser's Application inspection, confirm Local Storage, Session
+Storage, IndexedDB, Cache Storage, and OPFS contain no result data and that no service
+worker is registered. Inspecting the Network stream is allowed but is not MCP-boundary
+evidence.
 
 For the administrator-aborted-query case, submit the approved long-running bounded
 view and have the administrator terminate that query from Snowflake while it is
@@ -292,12 +276,11 @@ credentials, allowlists, network settings, or test objects. Cleanup-failure beha
 is not safely injectable in the connected environment and is covered by the local
 fake-connector suite instead.
 
-Copy the [value-free evidence template](mvp-evidence-template.md) outside the
-repository and retain only the permitted fields: date, software revision, case name,
-pass/fail, lifecycle/reason code, and administrator confirmation of bounded execution
-and expected grants/usage. Opaque request IDs may be recorded but are not required. Do
-not retain query results, screenshots, SQL text, profile values, object/account names,
-query IDs, driver errors, query-history rows, timings, sizes, or usage values.
+Use the [boundary evidence template](mvp-evidence-template.md) to record the software
+revision, case outcomes, and the exact MCP/CLI/Pi output assertions. Keep credentials
+out of evidence. Because this campaign uses non-sensitive canaries, screenshots and
+Snowflake diagnostics may be retained when useful; do not treat them as proof of what
+entered model context.
 
 Finally run `./scripts/check-dev.sh` (or `./scripts/check-dev.ps1` on Windows) and retain only
 the individual command names, exit status, and summary counts. The script runs:

@@ -6,6 +6,7 @@ from snowglobe.arrow_stream import ArrowAdmissionLimits
 
 MVP_MAXIMUM_TTL = timedelta(minutes=5)
 MVP_MAXIMUM_PENDING_REQUESTS = 1
+MVP_MAXIMUM_REQUESTS = 100
 
 MVP_LOGIN_TIMEOUT_SECONDS = 30
 MVP_NETWORK_TIMEOUT_SECONDS = 60

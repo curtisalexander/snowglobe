@@ -50,12 +50,14 @@ export async function getRequest(requestId: string): Promise<RequestSummary> {
 
 export async function openResultStream(
   requestId: string,
+  signal?: AbortSignal,
 ): Promise<ReadableStream<Uint8Array>> {
   const response = await fetch(
     `/v1/requests/${encodeURIComponent(requestId)}/stream`,
     {
       cache: "no-store",
       headers: { Accept: "application/vnd.snowglobe.arrow-stream" },
+      signal,
     },
   );
   if (

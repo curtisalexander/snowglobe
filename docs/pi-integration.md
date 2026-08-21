@@ -166,7 +166,7 @@ return result bytes or rich result metadata.
 | Symptom | Check |
 |---|---|
 | Tools are missing | Run `pi list`, confirm the package is enabled with `pi config`, then use `/reload` or restart Pi. |
-| Submission returns `SERVICE_UNAVAILABLE` | Confirm `snowglobe-local` is running on its fixed loopback endpoint and was launched with the intended profile. Do not ask Pi to inspect server logs or credentials. |
+| Submission returns `SERVICE_UNAVAILABLE` | Confirm `snowglobe-local` is running on its fixed loopback endpoint and was launched with the intended profile. Inspect startup or preflight diagnostics yourself; do not paste credentials or local diagnostics into Pi. |
 | First call is slow | The Git-installed package may be creating its package-local locked Python environment with `uv` for the first time. |
 | `uv` is not found | Install `uv` on `PATH`; do not point the extension at an unreviewed wrapper. |
 

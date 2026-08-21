@@ -1,7 +1,7 @@
 # Single-analyst local threat model
 
 **Status:** Ready for connected MVP validation
-**Last updated:** August 20, 2026
+**Last updated:** August 21, 2026
 
 ## Scope and claim
 
@@ -20,7 +20,7 @@ application path. Enabling the MCP does not grant an agent access to that path.
 | Component | Data allowed | Main controls |
 |---|---|---|
 | Coding agent and MCP/CLI/Pi adapter | Submitted SQL, TTL, opaque request ID, fixed reason, coarse lifecycle | Closed schemas, sanitized exceptions, independent Pi validation, no result reader |
-| Local Snowglobe runtime | Query input, policy decision, private execution handle, opaque ID, lifecycle, expiry | One loopback process, value-free logs, request-scoped cleanup |
+| Local Snowglobe runtime | Query input, policy decision, private execution handle, opaque ID, lifecycle, expiry | One loopback process, bounded request history, request-scoped cleanup |
 | Snowflake | Governed SQL and configured credentials | Explicit connector arguments, read-only role, approved views, independent limits |
 | Local viewer backend | Request lifecycle and admitted Arrow result | Loopback binding, no-store, stream only complete requests |
 | Browser worker | Provisional Arrow and in-memory DuckDB-Wasm table | Failure-atomic publication, memory limits, termination on failure |
@@ -47,7 +47,7 @@ connecting; it does not distinguish the browser from another local process.
 
 | Threat | Control |
 |---|---|
-| Result values or errors leak through MCP, CLI, or Pi | Closed result schemas; lifecycle-only polling; bounded/discarded process output; independent Pi receipt validation; final exception sanitization; canary scans |
+| Result values or errors leak through MCP, CLI, or Pi | Closed result schemas; lifecycle-only polling; bounded/discarded adapter output; independent Pi receipt validation; final exception sanitization; canary scans |
 | Service is exposed to the network | Supported launcher and Vite bind to `127.0.0.1`; documentation forbids `0.0.0.0` |
 | SQL mutates data or escapes approved objects | One parsed read query; approved views; fixed read-only role/warehouse |
 | Expensive or oversized work exhausts resources | Statement/queue timeouts; concurrency cap; server row/column/cell/Arrow/memory limits |
@@ -77,8 +77,7 @@ connecting; it does not distinguish the browser from another local process.
 - exact Pi tool registration and schemas, bounded subprocess behavior, independent
   receipt validation, and sanitized failure tests;
 - pending through terminal lifecycle tests with no result-derived fields;
-- canaries in cells, column names, SQL, and internal exceptions absent from MCP and
-  process output;
+- canaries in cells and column names absent from MCP, CLI, and Pi output;
 - viewer list/lookup behavior and complete-only stream access;
 - cancellation, expiry, source failure, and final-batch overflow tests;
 - local launcher and development server loopback configuration;

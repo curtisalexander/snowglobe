@@ -1,4 +1,4 @@
-"""Value-free validation for the fixed local Snowflake profile."""
+"""Operator validation for the fixed local Snowflake profile."""
 
 import argparse
 import sys
@@ -52,8 +52,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             arguments.profile,
             check_connection=arguments.connect,
         )
-    except Exception:
-        print("Snowglobe preflight failed.", file=sys.stderr)
+    except Exception as error:
+        print(f"Snowglobe preflight failed: {error}", file=sys.stderr)
         return 1
 
     print("Snowglobe preflight passed.")

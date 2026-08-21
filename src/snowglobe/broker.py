@@ -63,14 +63,18 @@ class InProcessBroker:
         *,
         maximum_ttl: timedelta = timedelta(minutes=15),
         maximum_pending_requests: int | None = None,
+        maximum_requests: int | None = None,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         if maximum_ttl <= timedelta(0):
             raise ValueError("maximum_ttl must be positive")
         if maximum_pending_requests is not None and maximum_pending_requests <= 0:
             raise ValueError("maximum_pending_requests must be positive")
+        if maximum_requests is not None and maximum_requests <= 0:
+            raise ValueError("maximum_requests must be positive")
         self._maximum_ttl = maximum_ttl
         self._maximum_pending_requests = maximum_pending_requests
+        self._maximum_requests = maximum_requests
         self._clock = clock or (lambda: datetime.now(UTC))
         self._records: dict[str, _RequestRecord] = {}
         self._lock = RLock()
@@ -79,22 +83,21 @@ class InProcessBroker:
         self,
         *,
         requested_ttl: timedelta,
-        source: ArrowBatchSource | None = None,
     ) -> RequestView:
-        """Register pending work, or a completed synthetic source for tests."""
+        """Register pending work."""
 
         if requested_ttl <= timedelta(0):
             raise ValueError("requested_ttl must be positive")
 
         with self._locked_records():
-            if source is None and self._at_pending_capacity():
+            if self._at_pending_capacity():
                 raise RequestUnavailable
+            self._make_room()
             request_id = self._new_request_id()
             record = _RequestRecord(
                 request_id=request_id,
-                status=RequestStatus.COMPLETE if source is not None else RequestStatus.PENDING,
+                status=RequestStatus.PENDING,
                 expires_at=self._now() + min(requested_ttl, self._maximum_ttl),
-                source=source,
             )
             self._records[request_id] = record
             return record.view()
@@ -237,6 +240,19 @@ class InProcessBroker:
             return False
         pending = sum(record.status is RequestStatus.PENDING for record in self._records.values())
         return pending >= self._maximum_pending_requests
+
+    def _make_room(self) -> None:
+        if self._maximum_requests is None or len(self._records) < self._maximum_requests:
+            return
+        for request_id, record in self._records.items():
+            if record.status in {
+                RequestStatus.FAILED,
+                RequestStatus.CANCELLED,
+                RequestStatus.EXPIRED,
+            }:
+                del self._records[request_id]
+                return
+        raise RequestUnavailable
 
     def _now(self) -> datetime:
         now = self._clock()

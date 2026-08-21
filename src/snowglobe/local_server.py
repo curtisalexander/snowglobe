@@ -56,17 +56,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     arguments = parser.parse_args(argv)
 
     try:
-        if arguments.connections is None and arguments.snowglobe_config is None:
-            runtime = create_runtime()
-        else:
-            runtime = create_runtime(
-                connections_path=arguments.connections,
-                snowglobe_config_path=arguments.snowglobe_config,
-                profile_name=arguments.profile,
-            )
+        runtime = create_runtime(
+            connections_path=arguments.connections,
+            snowglobe_config_path=arguments.snowglobe_config,
+            profile_name=arguments.profile,
+        )
         application = create_app(runtime)
-    except Exception:
-        print("Snowglobe startup failed.", file=sys.stderr)
+    except Exception as error:
+        print(f"Snowglobe startup failed: {error}", file=sys.stderr)
         return 1
 
     uvicorn.run(application, host="127.0.0.1", port=8000)

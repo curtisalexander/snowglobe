@@ -1,6 +1,7 @@
 # ADR 0009: Constrained Snowflake MVP budgets
 
-- **Status:** Accepted
+- **Status:** Superseded in part by [ADR 0017](0017-minimal-model-context-boundary.md)
+  and [ADR 0018](0018-minimal-boundary-cleanup.md)
 - **Date:** August 19, 2026
 - **Builds on:** [ADR 0008](0008-single-analyst-loopback-runtime.md)
 
@@ -45,7 +46,7 @@ representative analyst workload limits.
 - Results larger than the one bounded MVP viewport are rejected rather than silently
   truncated. Pagination and larger results remain deferred.
 - A second pending query receives the existing value-free service-unavailable path;
-  completed synthetic results do not consume execution capacity.
+  completed results do not consume execution capacity.
 - Server statement and queue deadlines limit work if client cancellation or network
   timers are delayed. `ABORT_DETACHED_QUERY` is an additional async/disconnect
   backstop; synchronous queries are expected to abort on connection loss.

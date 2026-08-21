@@ -25,16 +25,13 @@ ARROW_FRAME = 1
 COMPLETE_FRAME = 2
 FRAME_HEADER = struct.Struct(">BQ")
 
-SECURITY_HEADERS = {
-    "Cache-Control": "no-store",
-    "X-Content-Type-Options": "nosniff",
-}
+RESPONSE_HEADERS = {"Cache-Control": "no-store"}
 
 
 async def health(_request: Request) -> Response:
     return JSONResponse(
         {"status": "ok"},
-        headers=SECURITY_HEADERS,
+        headers=RESPONSE_HEADERS,
     )
 
 
@@ -45,7 +42,7 @@ async def list_requests(request: Request) -> Response:
         return _unavailable()
     return JSONResponse(
         {"requests": [_serialize_view(item) for item in requests]},
-        headers=SECURITY_HEADERS,
+        headers=RESPONSE_HEADERS,
     )
 
 
@@ -56,7 +53,7 @@ async def open_request(request: Request) -> Response:
         return _not_found()
     except Exception:
         return _unavailable()
-    return JSONResponse(_serialize_view(item), headers=SECURITY_HEADERS)
+    return JSONResponse(_serialize_view(item), headers=RESPONSE_HEADERS)
 
 
 async def stream_request(request: Request) -> Response:
@@ -64,8 +61,6 @@ async def stream_request(request: Request) -> Response:
         request_id = request.path_params["request_id"]
         source = request.app.state.broker.open_source(request_id)
         admission_limits = request.app.state.admission_limits
-        if admission_limits is None:
-            return _unavailable()
     except RequestUnavailable:
         return _not_found()
     except Exception:
@@ -79,7 +74,7 @@ async def stream_request(request: Request) -> Response:
             admission_limits=admission_limits,
         ),
         media_type=STREAM_CONTENT_TYPE,
-        headers=SECURITY_HEADERS,
+        headers=RESPONSE_HEADERS,
     )
 
 
@@ -117,7 +112,7 @@ def _not_found() -> JSONResponse:
     return JSONResponse(
         {"error": "not_found"},
         status_code=404,
-        headers=SECURITY_HEADERS,
+        headers=RESPONSE_HEADERS,
     )
 
 
@@ -125,14 +120,14 @@ def _unavailable() -> JSONResponse:
     return JSONResponse(
         {"error": "service_unavailable"},
         status_code=503,
-        headers=SECURITY_HEADERS,
+        headers=RESPONSE_HEADERS,
     )
 
 
 def create_app(
     *,
     broker: InProcessBroker,
-    admission_limits: ArrowAdmissionLimits | None = None,
+    admission_limits: ArrowAdmissionLimits,
 ) -> Starlette:
     application = Starlette(
         routes=[
