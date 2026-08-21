@@ -342,6 +342,9 @@ generate, parse, and authorize the exact SQL that will execute
 
 The 51-row cap is `K + 1` for a 50-row result budget. It lets Arrow admission detect
 an oversized result instead of silently presenting a truncated result as complete.
+The configured executor prints this final governed SQL, correlated with its opaque
+request ID, to the foreground local runtime immediately before the connector call. It
+does not add SQL to broker views or any model-facing receipt.
 
 For example, this approved input:
 
@@ -596,7 +599,10 @@ model-facing adapters.
 Do not log result batches, values, or result locations. `request_cursor()` suppresses
 the Snowflake connector logger because its debug and exceptional paths can include SQL,
 signed URLs, response structures, or Arrow payloads. This targeted suppression does not
-require unrelated local startup errors to be detail-free.
+require unrelated local startup errors to be detail-free. Snowglobe's own single
+operator diagnostic deliberately prints only the exact governed SQL and opaque request
+ID; operators must treat terminal captures as sensitive because SQL may contain
+literals.
 
 ## 15. Tests as architecture evidence
 

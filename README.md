@@ -145,6 +145,18 @@ SQL
 uv run snowglobe status '<opaque-request-id>'
 ```
 
+You do not need to create a SQL file. An MCP-capable agent drafts SQL from your
+description and sends it in the `sql` field of `submit_read_query`; Snowglobe itself
+does not translate natural language into SQL. The CLI likewise accepts any standard
+input, so a heredoc, pipe, or redirected file is only a caller preference.
+
+Before each Snowflake connector call, the foreground `snowglobe-local` terminal prints
+the opaque request ID and the exact governed SQL being attempted. This is the
+SQLGlot-regenerated statement after policy checks and the server-owned row cap, so it
+may differ in formatting and limit from the agent's draft. The SQL remains absent from
+MCP, CLI, and Pi responses. Because SQL can contain sensitive literals, protect any
+terminal capture or service log and do not paste it into an agent conversation.
+
 The CLI does not run a second executor and has no result-reading command. It requires
 `snowglobe-local` to remain running because the daemon owns the in-memory request and
 result state.

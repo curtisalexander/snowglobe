@@ -23,3 +23,4 @@ Snowglobe records consequential technical and security decisions as architecture
 | [0017](0017-minimal-model-context-boundary.md) | Accepted; implementation refined by [0018](0018-minimal-boundary-cleanup.md) and SQL policy by [0019](0019-relation-centric-sql-authorization.md) | Keep only the model-facing result boundary and ordinary correctness controls |
 | [0018](0018-minimal-boundary-cleanup.md) | Accepted | Apply the minimal boundary at model-facing adapters and bound local request history |
 | [0019](0019-relation-centric-sql-authorization.md) | Accepted | Commit to strict statements and relation sources with permissive query expressions |
+| [0020](0020-print-governed-sql-for-the-operator.md) | Accepted | Print exact governed SQL in the foreground runtime for the local operator |

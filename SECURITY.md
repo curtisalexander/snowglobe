@@ -30,9 +30,15 @@ diagnostics into an agent conversation. Snowglobe suppresses the Snowflake conne
 own logger because its debug and exceptional paths can contain result payloads or result
 locations.
 
+The foreground local runtime prints the exact governed SQL immediately before each
+connector execution attempt, correlated by opaque request ID. This operator-only
+diagnostic is not retained by Snowglobe or returned through MCP, CLI, or Pi, but a
+terminal or service manager may capture it. Treat that output as sensitive because SQL
+may contain literals.
+
 Until connected validation is complete, use only a dedicated non-production Snowflake
 identity and non-sensitive test data. Do not include credentials or query results in
 issues or transcripts.
 
 See [PLAN.md](PLAN.md) and
-[ADR 0018](docs/decisions/0018-minimal-boundary-cleanup.md).
+[ADR 0020](docs/decisions/0020-print-governed-sql-for-the-operator.md).

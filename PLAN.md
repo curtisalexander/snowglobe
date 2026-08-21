@@ -2,7 +2,7 @@
 
 **Status:** Ready for connected MVP validation
 **Last updated:** August 21, 2026
-**Current decision:** [ADR 0019](docs/decisions/0019-relation-centric-sql-authorization.md)
+**Current decision:** [ADR 0020](docs/decisions/0020-print-governed-sql-for-the-operator.md)
 
 ## Product
 
@@ -56,6 +56,9 @@ and outside the MCP contract.
   persisted.
 - Local configuration and startup commands may report actionable operator diagnostics;
   model-facing MCP, CLI, and Pi failures remain closed receipts.
+- Immediately before a connector execution attempt, the foreground local runtime prints
+  the opaque request ID and exact governed SQL for analyst troubleshooting. Snowglobe
+  does not retain that diagnostic.
 
 ## Current verification target
 

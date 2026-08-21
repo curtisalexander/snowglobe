@@ -60,15 +60,21 @@ class SnowflakeQueryAdmission:
         governed_sql = self._policy.authorize(sql)
 
         async def work(
-            _request_id: str,
+            request_id: str,
             mark_started: ExecutionStarted,
         ) -> InMemoryArrowBatchSource:
-            return await asyncio.to_thread(self._execute, governed_sql, mark_started)
+            return await asyncio.to_thread(
+                self._execute,
+                request_id,
+                governed_sql,
+                mark_started,
+            )
 
         return work
 
     def _execute(
         self,
+        request_id: str,
         governed_sql: str,
         mark_started: ExecutionStarted,
     ) -> InMemoryArrowBatchSource:
@@ -79,6 +85,10 @@ class SnowflakeQueryAdmission:
                 release_cursor = mark_started(cursor)
                 try:
                     executing_cursor = cast(_ExecutingSnowflakeCursor, cursor)
+                    print(
+                        f"Executing governed SQL for request {request_id}:\n{governed_sql}",
+                        flush=True,
+                    )
                     executing_cursor.execute(governed_sql, timeout=MVP_STATEMENT_TIMEOUT_SECONDS)
                     return _fetch_admitted_result(executing_cursor)
                 finally:

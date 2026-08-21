@@ -297,6 +297,13 @@ they must originate in the administrator-approved view.
 > Return the opaque submission receipt, poll the request with Snowglobe until it is
 > terminal, and report only the lifecycle receipt.
 
+No SQL file is required: the agent writes the `sql` tool argument from this request.
+Snowglobe governs and regenerates that SQL rather than generating SQL from natural
+language itself. Immediately before the connector call, the `snowglobe-local` terminal
+prints the request ID and exact regenerated SQL being attempted, including the enforced
+row cap. This operator output remains outside MCP responses; treat any terminal capture
+as sensitive and do not paste it back into the agent conversation.
+
 Expected agent-visible behavior:
 
 1. submission returns only `status`, `request_id`, and `reason_code`;

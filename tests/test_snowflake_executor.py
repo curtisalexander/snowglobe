@@ -161,6 +161,30 @@ def test_acceptance_waits_for_cursor_registration_then_retrieves_incrementally()
     asyncio.run(exercise())
 
 
+def test_prints_the_exact_governed_sql_with_its_request_id(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    async def exercise() -> tuple[str, FakeCursor]:
+        events: list[str] = []
+        cursor = FakeCursor(events, tables=(pa.table({"VALUE": [1]}),))
+        broker = InProcessBroker()
+        executor = _executor(broker, cursor, events)
+
+        request = await executor.submit(
+            sql=f"select VALUE from {ALLOWED_VIEW}",
+            requested_ttl=timedelta(minutes=5),
+        )
+        while broker.get_request(request.request_id).status is RequestStatus.PENDING:
+            await asyncio.sleep(0)
+        return request.request_id, cursor
+
+    request_id, cursor = asyncio.run(exercise())
+
+    assert capsys.readouterr().out == (
+        f"Executing governed SQL for request {request_id}:\n{cursor.executed_sql}\n"
+    )
+
+
 def test_empty_result_preserves_the_connector_arrow_schema() -> None:
     async def exercise() -> None:
         events: list[str] = []
