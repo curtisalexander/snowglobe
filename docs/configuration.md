@@ -20,7 +20,7 @@ Use an existing native Snowflake `connections.toml`, or start from
 account = "organization-account"
 user = "SNOWGLOBE_SERVICE_USER"
 authenticator = "SNOWFLAKE_JWT"
-private_key_file = "/run/secrets/snowglobe_snowflake_key.p8"
+private_key_path = "/run/secrets/snowglobe_snowflake_key.p8"
 database = "GOVERNED_DATABASE"
 warehouse = "SNOWGLOBE_WAREHOUSE"
 role = "SNOWGLOBE_READER"
@@ -60,7 +60,7 @@ type or transitive dependencies. Provision actual governed views and see the
 ## Key and file handling
 
 While building connector arguments, Snowglobe reads the selected profile's
-`private_key_file`, deserializes an unencrypted PEM or DER RSA key, and converts it in
+`private_key_path`, deserializes an unencrypted PEM or DER RSA key, and converts it in
 memory to the PKCS#8 DER bytes expected by `snowflake.connector.connect`. Local
 preflight and startup failures may name the configured path so the analyst can fix the
 problem; key bytes are never logged, serialized, or returned.
@@ -74,7 +74,7 @@ passphrases are intentionally not part of the file contract.
 - The real `connections.toml` and `snowglobe.toml` are ignored by Git.
 - Common private-key files (`*.pem`, `*.key`, and `*.p8`) are ignored; files with other
   extensions still must not be committed.
-- Use absolute paths when invoking Snowglobe and for `private_key_file`.
+- Use absolute paths when invoking Snowglobe and for `private_key_path`.
 - Do not place this configuration in a browser-served directory.
 - Do not add a CLI or MCP tool that prints either resolved profile.
 

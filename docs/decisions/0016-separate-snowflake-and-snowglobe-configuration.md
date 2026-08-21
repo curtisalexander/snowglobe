@@ -7,10 +7,10 @@
 ## Context
 
 Snowglobe's initial `connections.toml` was not a native Snowflake connections file. It
-wrapped profiles under `[connections.<name>]`, used `private_key_path`, and added the
-Snowglobe-only `schema_version` and `allowed_views` fields. An analyst with an existing
-Snowflake `connections.toml` therefore had to maintain a second, incompatible version
-of the same connection.
+wrapped profiles under `[connections.<name>]` and added the Snowglobe-only
+`schema_version` and `allowed_views` fields. An analyst with an existing Snowflake
+`connections.toml` therefore had to maintain a second, incompatible version of the
+same connection.
 
 Connection credentials and SQL authorization policy also have different owners and
 schemas. Mixing them makes a standard Snowflake file application-specific and obscures
@@ -19,7 +19,7 @@ which values are sent to the connector.
 ## Decision
 
 - Consume native Snowflake `connections.toml` profiles from top-level tables such as
-  `[default]`, including the native `private_key_file` name.
+  `[default]`, including the native `private_key_path` name.
 - Keep `schema_version` and per-profile `allowed_views` in a separate, strict
   Snowglobe-owned `snowglobe.toml`.
 - Select the same profile name from both files.

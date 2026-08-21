@@ -78,7 +78,7 @@ placeholder:
 account = "your-organization-your-account"
 user = "SNOWGLOBE_TEST_USER"
 authenticator = "SNOWFLAKE_JWT"
-private_key_file = "/absolute/private/path/snowglobe-test-key.p8"
+private_key_path = "/absolute/private/path/snowglobe-test-key.p8"
 database = "YOUR_TEST_DATABASE"
 warehouse = "YOUR_TEST_WAREHOUSE"
 role = "YOUR_SNOWGLOBE_READER_ROLE"
@@ -103,7 +103,7 @@ Field rules:
 
 - `account` is the identifier expected by the Snowflake Python connector;
 - use `database`, never `db`;
-- `private_key_file` must be an absolute path to an unencrypted PEM or DER RSA key;
+- `private_key_path` must be an absolute path to an unencrypted PEM or DER RSA key;
 - `allowed_views` must be non-empty and contain exact, fully qualified
   `DATABASE.SCHEMA.VIEW` names; and
 - missing Snowflake fields and missing, duplicate, or unknown Snowglobe policy fields

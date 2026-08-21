@@ -17,7 +17,7 @@ VALID_CONNECTIONS = """\
 account = "organization-account"
 user = "SNOWGLOBE_SERVICE_USER"
 authenticator = "SNOWFLAKE_JWT"
-private_key_file = "~/snowglobe-key.p8"
+private_key_path = "~/snowglobe-key.p8"
 database = "GOVERNED_DATABASE"
 warehouse = "SNOWGLOBE_WAREHOUSE"
 role = "SNOWGLOBE_READER"
@@ -49,7 +49,7 @@ def test_loads_native_snowflake_profile_and_separate_policy(tmp_path: Path) -> N
     snowglobe_profile = load_snowglobe_profile(snowglobe_path, "default")
 
     assert connection.database == "GOVERNED_DATABASE"
-    assert connection.private_key_file == Path.home() / "snowglobe-key.p8"
+    assert connection.private_key_path == Path.home() / "snowglobe-key.p8"
     assert snowglobe_profile.allowed_views == ("GOVERNED_DATABASE.GOVERNED_SCHEMA.APPROVED_VIEW",)
 
 
@@ -116,6 +116,7 @@ def test_builds_only_explicit_connector_arguments(tmp_path: Path) -> None:
         VALID_CONNECTIONS.replace(
             'authenticator = "SNOWFLAKE_JWT"', 'authenticator = "externalbrowser"'
         ),
+        VALID_CONNECTIONS.replace("private_key_path =", "private_key_file ="),
         VALID_CONNECTIONS.replace('warehouse = "SNOWGLOBE_WAREHOUSE"\n', ""),
     ],
 )

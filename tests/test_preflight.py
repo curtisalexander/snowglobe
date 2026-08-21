@@ -48,7 +48,7 @@ def write_profile(tmp_path: Path) -> tuple[Path, Path]:
 account = "organization-account"
 user = "SNOWGLOBE_SERVICE_USER"
 authenticator = "SNOWFLAKE_JWT"
-private_key_file = {json.dumps(str(key_path))}
+private_key_path = {json.dumps(str(key_path))}
 database = "GOVERNED_DATABASE"
 warehouse = "SNOWGLOBE_WAREHOUSE"
 role = "SNOWGLOBE_READER"

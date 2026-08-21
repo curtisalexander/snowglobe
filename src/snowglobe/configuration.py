@@ -22,7 +22,7 @@ CONNECTION_FIELDS = frozenset(
         "account",
         "user",
         "authenticator",
-        "private_key_file",
+        "private_key_path",
         "database",
         "warehouse",
         "role",
@@ -39,7 +39,7 @@ class SnowflakeProfile:
     account: str
     user: str
     authenticator: str
-    private_key_file: Path
+    private_key_path: Path
     database: str
     warehouse: str
     role: str
@@ -57,7 +57,7 @@ def build_connector_arguments(profile: SnowflakeProfile) -> dict[str, object]:
         "account": profile.account,
         "user": profile.user,
         "authenticator": profile.authenticator,
-        "private_key": load_private_key(profile.private_key_file),
+        "private_key": load_private_key(profile.private_key_path),
         "database": profile.database,
         "warehouse": profile.warehouse,
         "role": profile.role,
@@ -100,7 +100,7 @@ def load_snowflake_profile(path: Path, profile_name: str) -> SnowflakeProfile:
         account=values["account"],
         user=values["user"],
         authenticator=values["authenticator"],
-        private_key_file=Path(values["private_key_file"]).expanduser(),
+        private_key_path=Path(values["private_key_path"]).expanduser(),
         database=values["database"],
         warehouse=values["warehouse"],
         role=values["role"],
