@@ -18,11 +18,17 @@ test("Pi discovers the package extension from the root manifest", async () => {
 });
 
 test("the installable package contains only its runtime", () => {
+  const npmCli = process.env.npm_execpath;
+  assert.ok(npmCli, "npm_execpath is required to inspect the package");
   const packed = JSON.parse(
-    execFileSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
-      cwd: packageRoot,
-      encoding: "utf8",
-    }),
+    execFileSync(
+      process.execPath,
+      [npmCli, "pack", "--dry-run", "--json", "--ignore-scripts"],
+      {
+        cwd: packageRoot,
+        encoding: "utf8",
+      },
+    ),
   );
   const files = new Set(packed[0].files.map((file) => file.path));
 
