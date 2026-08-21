@@ -197,8 +197,9 @@ uv run snowglobe-preflight \
 ```
 
 The explicit `--connect` mode is permitted only by the constrained MVP test procedure.
-It opens and closes one Snowflake cursor, executes no SQL, and prints only a fixed
-pass/fail message.
+It opens and closes one Snowflake cursor and executes no SQL. Preflight reports each
+check as it starts and ends with a fixed pass/fail message; see the runbook for expected
+timing and connected-check scope.
 
 The local service's `--connections connections.toml --snowglobe-config snowglobe.toml
 --profile default` options explicitly enable configured execution. They are likewise
@@ -206,6 +207,11 @@ reserved for the Gate 5 procedure; starting without both configuration options r
 fail-closed. The connected procedure must install the optional connector first; both
 setup workflows do so. The MCP-only workflow excludes development dependencies with
 `uv sync --locked --no-dev --extra snowflake`.
+
+`snowglobe-local` reports its startup phases, starts a loopback server, and then remains
+running in the foreground until `Ctrl-C`. Startup validates local configuration and key
+material but does not connect to Snowflake; connections are opened only for submitted
+queries.
 
 The constrained MVP accepts one pending request for at most five minutes. Connection
 timeouts are 30 seconds for login, 60 seconds for network retries, and 15 seconds per

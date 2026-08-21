@@ -56,15 +56,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     arguments = parser.parse_args(argv)
 
     try:
+        print(
+            "Creating Snowglobe runtime (validating configured profiles, policy, and RSA key; "
+            "not connecting to Snowflake)...",
+            flush=True,
+        )
         runtime = create_runtime(
             connections_path=arguments.connections,
             snowglobe_config_path=arguments.snowglobe_config,
             profile_name=arguments.profile,
         )
+        print("Composing MCP and viewer routes around the shared local runtime...", flush=True)
         application = create_app(runtime)
     except Exception as error:
         print(f"Snowglobe startup failed: {error}", file=sys.stderr)
         return 1
 
+    print(
+        "Starting the loopback server. Uvicorn will report when startup completes; "
+        "this process then remains running until Ctrl-C.",
+        flush=True,
+    )
     uvicorn.run(application, host="127.0.0.1", port=8000)
     return 0

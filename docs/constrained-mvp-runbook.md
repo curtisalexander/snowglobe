@@ -104,8 +104,9 @@ uv run snowglobe-preflight \
   --profile default
 ```
 
-Successful output is `Snowglobe preflight passed.` On failure, use the reported local
-path or configuration detail to correct the profile or key.
+The command reports each check as it starts; all local checks should finish almost
+immediately. Successful output ends with `Snowglobe preflight passed.` On failure, use
+the reported local path or configuration detail to correct the profile or key.
 
 ## 4. Connected preflight
 
@@ -119,8 +120,15 @@ uv run snowglobe-preflight \
   --connect
 ```
 
-Require the same fixed pass message. Then verify that the login used the dedicated user,
-role, and warehouse and did not execute a statement. Stop if the selected context
+The command reports when it starts waiting for Snowflake. It normally finishes within
+a few seconds. Login retries stop after 30 seconds, but an in-flight socket operation
+can overrun that budget. If it remains at that step for about a minute, interrupt it
+and check network, DNS, account, and authentication settings before retrying.
+
+Require the final pass message. The connected check confirms authentication and cursor
+creation with the configured role, warehouse, and database; it does not execute SQL or
+test access to every allowed view. Verify separately that the login used the dedicated
+user and expected context and did not execute a statement. Stop if the selected context
 differs from the reviewed configuration.
 
 ## 5. Launch
@@ -133,6 +141,11 @@ uv run snowglobe-local \
   --snowglobe-config /absolute/private/path/snowglobe.toml \
   --profile default
 ```
+
+Startup validates the local profiles, policy, and RSA key but does not connect to
+Snowflake. Those checks should finish almost immediately. The command then starts the
+loopback server and deliberately remains running in the foreground until `Ctrl-C`.
+Wait for Uvicorn to report that application startup is complete before continuing.
 
 In a second terminal, start the loopback-only viewer development server:
 

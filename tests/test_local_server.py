@@ -21,7 +21,10 @@ def test_local_server_shares_one_broker_between_mcp_and_viewer_routes() -> None:
     assert "requests" in response.json()
 
 
-def test_local_launcher_binds_only_to_loopback(monkeypatch: MonkeyPatch) -> None:
+def test_local_launcher_binds_only_to_loopback(
+    monkeypatch: MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     invocation: dict[str, object] = {}
 
     def run(app: object, *, host: str, port: int) -> None:
@@ -36,6 +39,13 @@ def test_local_launcher_binds_only_to_loopback(monkeypatch: MonkeyPatch) -> None
     application = invocation["app"]
     assert isinstance(application, Starlette)
     assert application.state.broker is application.state.runtime.broker
+    assert capsys.readouterr().out == (
+        "Creating Snowglobe runtime (validating configured profiles, policy, and RSA key; "
+        "not connecting to Snowflake)...\n"
+        "Composing MCP and viewer routes around the shared local runtime...\n"
+        "Starting the loopback server. Uvicorn will report when startup completes; "
+        "this process then remains running until Ctrl-C.\n"
+    )
 
 
 def test_local_launcher_fails_closed_with_only_one_config_file(
@@ -48,6 +58,11 @@ def test_local_launcher_fails_closed_with_only_one_config_file(
     monkeypatch.setattr(local_server.uvicorn, "run", unexpected_run)
 
     assert local_server.main(["--connections", "connections.toml"]) == 1
-    assert capsys.readouterr().err == (
+    captured = capsys.readouterr()
+    assert captured.out == (
+        "Creating Snowglobe runtime (validating configured profiles, policy, and RSA key; "
+        "not connecting to Snowflake)...\n"
+    )
+    assert captured.err == (
         "Snowglobe startup failed: --connections and --snowglobe-config must be supplied together\n"
     )

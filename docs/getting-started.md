@@ -130,9 +130,10 @@ uv run --locked --no-dev --extra snowflake snowglobe-preflight \
   --profile default
 ```
 
-Successful output is `Snowglobe preflight passed.` A failure includes the local path or
-configuration detail needed to fix it. Then open and close one cursor without executing
-SQL:
+The command reports each local check as it starts. These checks should finish almost
+immediately. Successful output ends with `Snowglobe preflight passed.` A failure
+includes the local path or configuration detail needed to fix it. Then open and close
+one cursor without executing SQL:
 
 ```bash
 uv run --locked --no-dev --extra snowflake snowglobe-preflight \
@@ -142,8 +143,17 @@ uv run --locked --no-dev --extra snowflake snowglobe-preflight \
   --connect
 ```
 
-Verify that the login selected the expected user, role, warehouse, and database and
-executed no statement. Stop if they differ.
+The connected check reports when it starts waiting for Snowflake. It normally finishes
+within a few seconds. Login retries stop after 30 seconds, but the connector documents
+that an in-flight socket operation can overrun that budget, so wall-clock time can be
+longer. If it remains at that step for about a minute, interrupt it and check network,
+DNS, account, and authentication settings before retrying.
+
+This check confirms that the configured identity can authenticate and that the runtime
+can create and close a cursor with the configured role, warehouse, and database. It
+does not execute SQL or test whether every allowed view is readable. Verify separately
+that Snowflake selected the expected context and recorded no statement. Stop if it
+differs.
 
 ## 5. Start Snowglobe
 
@@ -155,6 +165,12 @@ uv run --locked --no-dev --extra snowflake snowglobe-local \
   --snowglobe-config /absolute/private/path/snowglobe.toml \
   --profile default
 ```
+
+Startup validates the local profiles, policy, and RSA key but does not connect to
+Snowflake. Those checks should finish almost immediately. The command then starts the
+loopback server and deliberately remains running in the foreground until you stop it
+with `Ctrl-C`; this is not a hung startup. Wait for Uvicorn to report that application
+startup is complete before continuing.
 
 Confirm runtime health:
 

@@ -80,6 +80,7 @@ def test_local_preflight_does_not_connect(tmp_path: Path) -> None:
 def test_connected_preflight_opens_no_query(tmp_path: Path) -> None:
     connections_path, snowglobe_path = write_profile(tmp_path)
     events: list[str] = []
+    progress: list[str] = []
 
     def connect(**arguments: object) -> FakeConnection:
         assert arguments["role"] == "SNOWGLOBE_READER"
@@ -92,9 +93,20 @@ def test_connected_preflight_opens_no_query(tmp_path: Path) -> None:
         "default",
         check_connection=True,
         connect=connect,
+        progress=progress.append,
     )
 
     assert events == ["connect", "connection.cursor", "cursor.close", "connection.close"]
+    assert progress == [
+        "Checking Snowflake connection profile...",
+        "Checking Snowglobe policy profile and allowed views...",
+        "Checking RSA private key...",
+        (
+            "Connecting to Snowflake and opening a cursor without executing SQL "
+            "(30-second login timeout; an in-flight socket operation may take longer)..."
+        ),
+        "Snowflake connection and cursor check passed.",
+    ]
 
 
 def test_cli_reports_a_useful_local_failure(
@@ -107,7 +119,7 @@ def test_cli_reports_a_useful_local_failure(
     assert main(["--connections", str(missing_path)]) == 1
 
     captured = capsys.readouterr()
-    assert captured.out == ""
+    assert captured.out == "Checking Snowflake connection profile...\n"
     assert captured.err.startswith("Snowglobe preflight failed:")
     assert canary in captured.err
 
@@ -131,5 +143,10 @@ def test_cli_reports_value_free_success(
     )
 
     captured = capsys.readouterr()
-    assert captured.out == "Snowglobe preflight passed.\n"
+    assert captured.out == (
+        "Checking Snowflake connection profile...\n"
+        "Checking Snowglobe policy profile and allowed views...\n"
+        "Checking RSA private key...\n"
+        "Snowglobe preflight passed.\n"
+    )
     assert captured.err == ""
