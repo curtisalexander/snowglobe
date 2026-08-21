@@ -1,5 +1,6 @@
 $ErrorActionPreference = "Stop"
 
+Write-Host "Running complete development checks"
 $checks = @(
     @("uv", "run", "ruff", "format", "--check", "."),
     @("uv", "run", "ruff", "check", "."),

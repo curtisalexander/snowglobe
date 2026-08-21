@@ -102,25 +102,25 @@ snowglobe/
 ├── tests/                  Backend and cross-boundary pytest suite
 ├── docs/decisions/         Accepted architecture decisions
 ├── docs/                   Runbooks, threat model, and implementation guides
-├── scripts/setup.sh        Locked developer installation
-├── scripts/setup.ps1       Locked Windows developer installation
-├── scripts/check.sh        Complete connection-free verification
-├── scripts/check.ps1       Complete Windows connection-free verification
+├── scripts/setup-dev.sh    Locked developer installation
+├── scripts/setup-dev.ps1   Locked Windows developer installation
+├── scripts/check-dev.sh    Complete connection-free verification
+├── scripts/check-dev.ps1   Complete Windows connection-free verification
 ├── pyproject.toml          Python package, entry points, and tool configuration
 └── package.json            Viewer commands and Pi package manifest
 ```
 
 ### Developer setup and daily loop
 
-On Linux, macOS, or Windows, install Python 3.12+, `uv`, Node.js 22.12+, and npm. Then,
+On Linux, macOS, or Windows, install Python 3.12+, `uv`, Node.js 22.19+, and npm. Then,
 from a fresh clone on Linux or macOS:
 
 ```bash
-./scripts/setup.sh
-./scripts/check.sh
+./scripts/setup-dev.sh
+./scripts/check-dev.sh
 ```
 
-On Windows PowerShell, run `./scripts/setup.ps1` and `./scripts/check.ps1`.
+On Windows PowerShell, run `./scripts/setup-dev.ps1` and `./scripts/check-dev.ps1`.
 
 The setup script installs the exact Python lock, including the optional Snowflake
 connector, and the exact npm lock. The check script is connection-free and is the
@@ -612,7 +612,7 @@ The tests are organized around boundaries rather than only functions:
 Run everything with:
 
 ```bash
-./scripts/check.sh
+./scripts/check-dev.sh
 ```
 
 Useful focused loops:
@@ -684,7 +684,7 @@ text.
 
 ### Pass 5: proof and current gaps
 
-Run `./scripts/check.sh`, then read the unchecked Gate 5 items and deferred section in
+Run `./scripts/check-dev.sh`, then read the unchecked Gate 5 items and deferred section in
 [PLAN.md](../PLAN.md). This distinguishes implementation-complete behavior from
 connected behavior that still needs evidence.
 

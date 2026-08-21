@@ -2,7 +2,7 @@ import svelte from "eslint-plugin-svelte";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist/"] },
+  { ignores: ["dist/", ".svelte-check/"] },
   ...tseslint.configs.recommended,
   ...svelte.configs.recommended,
   {

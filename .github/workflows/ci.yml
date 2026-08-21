@@ -34,7 +34,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: ./scripts/setup.ps1
+      - run: ./scripts/setup-dev.ps1
       - run: uv run ruff check .
       - run: uv run ty check
       - run: uv run pytest

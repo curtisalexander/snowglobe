@@ -89,10 +89,10 @@ On Windows, keep configuration and key files in an analyst-controlled location.
 Install the exact locked project dependencies and optional connector:
 
 ```bash
-./scripts/setup.sh
+./scripts/setup-dev.sh
 ```
 
-On Windows PowerShell, run `./scripts/setup.ps1`.
+On Windows PowerShell, run `./scripts/setup-dev.ps1`.
 
 Use an existing native Snowflake `connections.toml`, or copy
 `connections.example.toml` to an untracked path outside the repository. Copy
@@ -299,7 +299,7 @@ and expected grants/usage. Opaque request IDs may be recorded but are not requir
 not retain query results, screenshots, SQL text, profile values, object/account names,
 query IDs, driver errors, query-history rows, timings, sizes, or usage values.
 
-Finally run `./scripts/check.sh` (or `./scripts/check.ps1` on Windows) and retain only
+Finally run `./scripts/check-dev.sh` (or `./scripts/check-dev.ps1` on Windows) and retain only
 the individual command names, exit status, and summary counts. The script runs:
 
 ```bash

@@ -100,24 +100,24 @@ HTTP access are separate agent capabilities controlled by the agent host.
 
 The credential-bearing MVP runtime supports Linux, macOS, and native Windows 10/11.
 Snowglobe trusts the analyst and operating system to manage file access. All platforms
-require Python 3.12 with `uv`, plus Node.js 22.12 or newer and npm.
+require Python 3.12 with `uv`, plus Node.js 22.19 or newer and npm.
 
 From a fresh clone, install the exact locked dependencies, including the optional
 Snowflake connector:
 
 ```bash
-./scripts/setup.sh
+./scripts/setup-dev.sh
 ```
 
-On Windows PowerShell, run `./scripts/setup.ps1` instead.
+On Windows PowerShell, run `./scripts/setup-dev.ps1` instead.
 
 Run the complete connection-free suite with one command:
 
 ```bash
-./scripts/check.sh
+./scripts/check-dev.sh
 ```
 
-On Windows PowerShell, run `./scripts/check.ps1` instead.
+On Windows PowerShell, run `./scripts/check-dev.ps1` instead.
 
 To start in fail-closed development mode without Snowflake execution:
 
@@ -164,7 +164,7 @@ only for deliberate extension development.
 See the [Pi integration guide](docs/pi-integration.md) for global and project-local
 installation, verification, usage, security behavior, updates, and removal.
 
-The check script runs:
+The development check script runs:
 
 ```bash
 uv run ruff format --check .
@@ -205,8 +205,9 @@ pass/fail message.
 The local service's `--connections connections.toml --snowglobe-config snowglobe.toml
 --profile default` options explicitly enable configured execution. They are likewise
 reserved for the Gate 5 procedure; starting without both configuration options remains
-fail-closed. The connected procedure must install the optional connector first; the
-setup script does so with `uv sync --locked --extra snowflake`.
+fail-closed. The connected procedure must install the optional connector first; both
+setup workflows do so. The MCP-only workflow excludes development dependencies with
+`uv sync --locked --no-dev --extra snowflake`.
 
 The constrained MVP accepts one pending request for at most five minutes. Connection
 timeouts are 30 seconds for login, 60 seconds for network retries, and 15 seconds per

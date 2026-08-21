@@ -8,7 +8,7 @@ fi
 
 if ! node -e '
 const [major, minor] = process.versions.node.split(".").map(Number);
-if (major < 22 || (major === 22 && minor < 12)) process.exit(1);
+if (major < 22 || (major === 22 && minor < 19)) process.exit(1);
 ' 2>/dev/null; then
   echo "Installing Node.js 24"
   node_archive="$(curl -LsSf https://nodejs.org/dist/latest-v24.x/SHASUMS256.txt \
@@ -33,4 +33,4 @@ if (major < 22 || (major === 22 && minor < 12)) process.exit(1);
   done
 fi
 
-./scripts/setup.sh
+./scripts/setup-dev.sh

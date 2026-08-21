@@ -14,13 +14,12 @@ authoritative.
 Use Linux, macOS, or native Windows 10/11. Snowglobe relies on the analyst and
 operating system to manage file access.
 
-Install Python 3.12, `uv`, Node.js 22.12 or newer, and npm. From a fresh clone:
+Install Python 3.12 and `uv`. From a fresh clone:
 
 ```bash
 git clone https://github.com/curtisalexander/snowglobe.git
 cd snowglobe
-./scripts/setup.sh
-./scripts/check.sh
+./scripts/setup-mcp.sh
 ```
 
 On Windows PowerShell:
@@ -28,18 +27,18 @@ On Windows PowerShell:
 ```powershell
 git clone https://github.com/curtisalexander/snowglobe.git
 Set-Location snowglobe
-./scripts/setup.ps1
-./scripts/check.ps1
+./scripts/setup-mcp.ps1
 ```
 
 The remaining multi-line `bash` examples use `\` for continuation. In PowerShell,
 remove the backslashes and run the same arguments on one line; Windows paths may use
 forward slashes in Snowglobe arguments and TOML.
 
-The setup command installs the locked Python dependencies, pinned Snowflake connector,
-and locked viewer dependencies. The check command runs formatting, lint, Python and
-TypeScript type checks, the backend and viewer test suites, and the production build.
-It does not connect to Snowflake.
+The setup command installs only the locked Python runtime dependencies and Snowflake
+connector needed to run the MCP server. It does not install development tools, test
+dependencies, Node.js, npm packages, the Pi integration, or the viewer development
+server. Repository contributors should instead follow the
+[developer setup](developer-guide.md#developer-setup-and-daily-loop).
 
 ## 2. Prepare a constrained Snowflake environment
 
@@ -129,7 +128,7 @@ handling guidance.
 First validate the profile, key, and allowlist without connecting:
 
 ```bash
-uv run snowglobe-preflight \
+uv run --locked --no-dev --extra snowflake snowglobe-preflight \
   --connections /absolute/private/path/connections.toml \
   --snowglobe-config /absolute/private/path/snowglobe.toml \
   --profile default
@@ -139,7 +138,7 @@ The only successful output is `Snowglobe preflight passed.` Then, under the runb
 constrained exception, open and close one cursor without executing SQL:
 
 ```bash
-uv run snowglobe-preflight \
+uv run --locked --no-dev --extra snowflake snowglobe-preflight \
   --connections /absolute/private/path/connections.toml \
   --snowglobe-config /absolute/private/path/snowglobe.toml \
   --profile default \
@@ -154,16 +153,10 @@ role, warehouse, and database and executed no statement. Stop if they differ.
 In the first terminal, run the one broker-owning process:
 
 ```bash
-uv run snowglobe-local \
+uv run --locked --no-dev --extra snowflake snowglobe-local \
   --connections /absolute/private/path/connections.toml \
   --snowglobe-config /absolute/private/path/snowglobe.toml \
   --profile default
-```
-
-In a second terminal, start the loopback viewer:
-
-```bash
-npm run dev
 ```
 
 Confirm runtime health:
@@ -175,16 +168,15 @@ curl --fail --silent http://127.0.0.1:8000/healthz
 On Windows PowerShell, use
 `Invoke-RestMethod http://127.0.0.1:8000/healthz`.
 
-The MCP endpoint is `http://127.0.0.1:8000/mcp`. Vite prints the viewer URL, normally
-`http://127.0.0.1:5173/`. Keep both processes and the MCP client on the same local
-machine. Do not use VS Code Remote SSH, a dev container, a proxy, a tunnel, port
-forwarding, or a non-loopback bind for the connected MVP.
+The MCP endpoint is `http://127.0.0.1:8000/mcp`. Keep the process and MCP client on the
+same local machine. Do not use VS Code Remote SSH, a dev container, a proxy, a tunnel,
+port forwarding, or a non-loopback bind for the connected MVP.
 
 ## 6. Configure one control adapter
 
-Choose one native MCP client below, or install the native Pi package. MCP configuration
-contains only Snowglobe's loopback URL; it contains no Snowflake credential or
-connection setting. Restart or reload a native client after configuring it.
+Choose one native MCP client below. MCP configuration contains only Snowglobe's
+loopback URL; it contains no Snowflake credential or connection setting. Restart or
+reload a native client after configuring it.
 
 ### Amp
 
@@ -268,55 +260,6 @@ Do not configure the same file as both YAML and JSON, and do not use the depreca
 SSE transport. Run the Continue extension and Snowglobe directly on the same local
 machine rather than through a remote VS Code extension host.
 
-### Pi
-
-Pi does not support MCP, so Snowglobe provides a native Pi package. Install it directly
-from the exact clean revision you reviewed:
-
-```bash
-test -z "$(git status --short)"
-SNOWGLOBE_REF="$(git rev-parse HEAD)"
-pi install "git:github.com/curtisalexander/snowglobe@${SNOWGLOBE_REF}"
-pi list
-```
-
-On Windows PowerShell:
-
-```powershell
-if (git status --short) { throw "The checkout must be clean." }
-$snowglobeRef = git rev-parse HEAD
-pi install "git:github.com/curtisalexander/snowglobe@$snowglobeRef"
-pi list
-```
-
-Restart Pi and confirm `submit_read_query` and `get_query_status` are available. The
-package registers typed tools that invoke Snowglobe's fixed-loopback, result-free CLI.
-The runtime must remain running. See the [complete Pi integration guide](pi-integration.md)
-for project-local installation, updates, removal, troubleshooting, and security detail.
-Record `SNOWGLOBE_REF` as the Pi package revision in the private value-free evidence.
-
-### Another shell-only agent, or Pi adapter debugging
-
-Use the result-free CLI directly when an agent cannot load a native extension or when
-debugging the Pi adapter. Keep `snowglobe-local` running, then pipe SQL through stdin:
-
-```bash
-printf '%s\n' 'SELECT * FROM YOUR_TEST_DATABASE.YOUR_TEST_SCHEMA.YOUR_APPROVED_VIEW' \
-  | uv run snowglobe submit \
-      --ttl 300
-```
-
-On Windows PowerShell:
-
-```powershell
-'SELECT * FROM YOUR_TEST_DATABASE.YOUR_TEST_SCHEMA.YOUR_APPROVED_VIEW' | uv run snowglobe submit --ttl 300
-```
-
-Retain only the returned opaque ID and run
-`uv run snowglobe status '<opaque-request-id>'` to poll it. The CLI deliberately has no
-result, viewer, configuration, or cancellation commands. SQL is stdin-only so it is not
-a `snowglobe` process argument.
-
 ## 7. Verify the control surface
 
 Native MCP clients must see exactly:
@@ -328,13 +271,6 @@ It must not advertise Snowglobe resources, prompts, result readers, cancellation
 tools, or connection-setting inputs. If the runtime was started without both
 configuration files, a
 submission correctly returns `SERVICE_UNAVAILABLE`.
-
-The Pi extension must register exactly the same two tools, with closed input schemas,
-and return only compact JSON text matching the receipt contracts. The CLI must expose
-only `submit` and `status`. Successful invocation writes exactly one `QueryReceipt` or
-`QueryStatusReceipt` JSON object to stdout. Neither adapter may emit result data,
-schema, counts, Snowflake errors, identifiers, or result URLs. Malformed results and
-invocations become closed receipts without reflecting their input.
 
 ## 8. Run the first agent experiment
 
@@ -355,19 +291,15 @@ Expected agent-visible behavior:
 3. a successful request eventually reaches `complete` without rows, schema, counts,
    timing, errors, Snowflake identifiers, or a result URL entering the conversation.
 
-Open the Vite URL yourself, select the same request, and choose **Open result**. The
-non-sensitive canary values and columns should appear there and nowhere in the agent
-conversation. Reload or close the page after inspection to destroy browser worker
-state.
-
 For this experiment, enable Snowglobe's MCP tools without separately enabling browser,
 screenshot, shell, or direct HTTP tools. Those capabilities are controlled by the agent
 host and are not granted by Snowglobe's MCP.
 
-## 9. Continue the MVP campaign
+## 9. Finish the MCP smoke test
 
-Run every case in the
-[connected matrix](constrained-mvp-runbook.md#9-required-connected-checks-and-evidence),
-including policy rejection, overflow, timeout, cancellation, expiry, and restart.
-Copy the [value-free evidence template](mvp-evidence-template.md) outside the
-repository and retain only the fields it permits.
+Stop `snowglobe-local` with `Ctrl-C`. Confirm with the administrator that no test query
+is running and the dedicated warehouse has auto-suspended. This guide tests only the
+MCP server's governed submission and lifecycle surface; it does not install or test the
+viewer, Pi adapter, or repository development toolchain. Use the
+[constrained MVP runbook](constrained-mvp-runbook.md) only when running the broader
+end-to-end product campaign.

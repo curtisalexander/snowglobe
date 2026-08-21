@@ -6,7 +6,7 @@ from datetime import timedelta
 
 import pyarrow as pa
 import pytest
-from httpx import Response
+from httpx2 import Response
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
